@@ -78,7 +78,6 @@ const Features = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-6 py-12">
-        {/* Header Section */}
         <div className="text-center mb-16">
           <h1 className="text-4xl lg:text-5xl font-bold mb-6">
             <span className="text-green-500">All-in-One</span> WhatsApp
@@ -91,7 +90,6 @@ const Features = () => {
         </div>
 
         <div className="grid lg:grid-cols-2 gap-16 items-start">
-          {/* Left Side - Features */}
           <div>
             <div className="mb-12">
               <h2 className="text-3xl font-bold text-gray-900 mb-2">
@@ -103,7 +101,6 @@ const Features = () => {
               {features.map((feature) => (
                 <div key={feature.id} className="group">
                   <div className="flex items-start space-x-4">
-                    {/* Feature Number Circle */}
                     <div
                       className={`w-8 h-8 ${feature.color} rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-sm`}
                     >
@@ -111,7 +108,6 @@ const Features = () => {
                     </div>
 
                     <div className="flex-1">
-                      {/* Feature Title */}
                       <div className="flex items-center space-x-3 mb-3">
                         <div className="text-gray-700">{feature.icon}</div>
                         <h3 className="text-xl font-bold text-gray-900">
@@ -119,7 +115,6 @@ const Features = () => {
                         </h3>
                       </div>
 
-                      {/* Feature Details */}
                       <div className="space-y-2 text-gray-600">
                         {feature.details.map((detail, index) => (
                           <div
@@ -138,7 +133,6 @@ const Features = () => {
             </div>
           </div>
 
-          {/* Right Side - Illustration replaced with image */}
           <div className="relative">
             <div className="  flex flex-col mt-0  items-center">
               <img
@@ -147,7 +141,6 @@ const Features = () => {
                 className="h-90 w-270  hover:scale-105 transition-transform duration-300"
               />
 
-              {/* CTA Button */}
               <div className="text-center mt-8">
                 <button className="px-8 py-4 bg-green-500 text-white font-bold text-lg rounded-xl hover:bg-green-600 transform hover:scale-105 transition-all duration-200 shadow-lg">
                   Try for Free
@@ -158,7 +151,6 @@ const Features = () => {
         </div>
       </div>
 
-      {/* Footer */}
       <footer className="bg-white border-t border-gray-200 mt-20">
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">

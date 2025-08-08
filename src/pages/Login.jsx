@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { User, Lock, Eye, EyeOff } from "lucide-react"; // lucide icons
-import loginImage from "../assets/signup.png"; // change path to your image
+import { User, Lock, Eye, EyeOff } from "lucide-react"; 
+import loginImage from "../assets/signup.png"; 
 import { Link } from "react-router-dom";
 
 export default function LoginPage() {
@@ -18,12 +18,11 @@ export default function LoginPage() {
   const handleSubmit = (e) => {
     e.preventDefault();
     console.log("Login Data:", formData);
-    // Add your login logic here
+    
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
-      {/* Left side image */}
       <div className="w-full lg:w-1/2 bg-gradient-to-br flex items-center justify-end p-8">
         <img
           src={loginImage}
@@ -32,7 +31,6 @@ export default function LoginPage() {
         />
       </div>
 
-      {/* Right side form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6">
         <div className="w-full max-w-lg">
           <div className="bg-white rounded-2xl shadow-xl p-8 sm:p-6">
@@ -41,7 +39,6 @@ export default function LoginPage() {
             </h1>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Username */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Username
@@ -59,7 +56,6 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Password */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Password
@@ -88,7 +84,6 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 className="w-full bg-green-500 text-white font-semibold py-3 rounded-lg hover:bg-green-600 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors transform hover:scale-105 duration-200"
@@ -97,7 +92,6 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {/* Switch to Sign Up */}
             <div className="mt-5 text-center">
               <p className="text-sm text-gray-600">
                 Don’t have an account?{" "}
