@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import SignUp from './pages/SignUp'
-import ScanQrCode from './pages/ScanQRCode'
+import Login from './pages/Login'
 import './index.css'
 import Features from './pages/Features'
 
@@ -16,7 +16,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/signup" element={<SignUp />} />
-        <Route path="/scanqrcode" element={<ScanQrCode />} />
+        <Route path="/login" element={<Login />} />
          <Route path="/features" element={<Features />} />
       </Routes>
     </Router>

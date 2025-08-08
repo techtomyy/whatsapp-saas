@@ -20,7 +20,7 @@ const Dashboard = () => {
                 </span>
               </div>
               <div className="flex items-center space-x-3">
-                <Link to="/scanqrcode">
+                <Link to="/login">
                   <button className="px-5 py-2 border-2 border-green-500 text-green-500 font-semibold rounded-lg hover:bg-green-50 transition-colors">
                     Sign in
                   </button>
