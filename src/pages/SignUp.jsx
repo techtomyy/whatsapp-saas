@@ -156,7 +156,7 @@ export default function SignUpPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text_sm font-semibold text-gray-700 mb-2">
                   Contact No
                 </label>
                 <div className="relative">
