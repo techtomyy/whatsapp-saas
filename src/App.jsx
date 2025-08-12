@@ -6,6 +6,9 @@ import Login from "./pages/Login";
 import Features from "./pages/Features";
 import Dashboard from "./pages/Dashboard";
 import Contacts from "./pages/Contacts";
+import Composer from "./pages/Composer";
+import Logs from "./pages/Logs";
+
 import "./index.css";
 
 function App() {
@@ -21,6 +24,8 @@ function App() {
           <Route path="/features" element={<Features />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/contacts" element={<Contacts />} />
+          <Route path="/composer" element={<Composer />} />
+          <Route path="/logs" element={<Logs />} />
         </Routes>
       </Router>
     </>
