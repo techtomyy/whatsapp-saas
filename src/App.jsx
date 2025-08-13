@@ -8,6 +8,9 @@ import Dashboard from "./pages/Dashboard";
 import Contacts from "./pages/Contacts";
 import Composer from "./pages/Composer";
 import Logs from "./pages/Logs";
+import Templates from "./pages/Templates";
+import Automations from "./pages/Automations";
+
 
 import "./index.css";
 
@@ -26,6 +29,8 @@ function App() {
           <Route path="/contacts" element={<Contacts />} />
           <Route path="/composer" element={<Composer />} />
           <Route path="/logs" element={<Logs />} />
+          <Route path="/templates" element={<Templates />} />
+          <Route path="/automations" element={<Automations />} />
         </Routes>
       </Router>
     </>
