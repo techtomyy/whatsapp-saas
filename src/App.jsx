@@ -10,6 +10,11 @@ import Composer from "./pages/Composer";
 import Logs from "./pages/Logs";
 import Templates from "./pages/Templates";
 import Automations from "./pages/Automations";
+import Analytics from "./pages/Analytics";
+import Security from "./pages/Security";
+// import Billing from "./pages/Billing";
+// import Settings from "./pages/Settings";
+// import Admin from "./pages/Admin";
 
 
 import "./index.css";
@@ -31,6 +36,11 @@ function App() {
           <Route path="/logs" element={<Logs />} />
           <Route path="/templates" element={<Templates />} />
           <Route path="/automations" element={<Automations />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/security" element={<Security />} />
+          {/* <Route path="/billing" element={<Billing />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/admin" element={<Admin />} /> */}
         </Routes>
       </Router>
     </>
