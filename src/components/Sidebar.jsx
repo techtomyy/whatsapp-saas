@@ -11,6 +11,7 @@ import {
   Shield,
   CreditCard,
   UserCheck,
+  Settings as LucideSettings,
   Menu,
   X,
 } from "lucide-react";
@@ -74,6 +75,12 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
       icon: <CreditCard className="w-5 h-5" />,
       label: "Billing",
       path: "/billing"
+    },
+    {
+      id: "settings",
+      icon: <Settings className="w-5 h-5" />,
+      label: "Settings",
+      path: "/settings"
     },
     {
       id: "admin",

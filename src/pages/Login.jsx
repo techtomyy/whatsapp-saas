@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { User, Lock, Eye, EyeOff } from "lucide-react"; 
-import loginImage from "../assets/signup.png"; 
-import { Link } from "react-router-dom";
+import { User, Lock, Eye, EyeOff } from "lucide-react";
+import loginImage from "../assets/signup.png";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({
@@ -10,16 +11,26 @@ export default function LoginPage() {
   });
 
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const { login } = useAuth();
+  const navigate = useNavigate();
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("Login Data:", formData);
-    
+    setError("");
+
+    try {
+      await login(formData.username, formData.password);
+      navigate("/dashboard");
+    } catch (err) {
+      setError("Invalid credentials");
+    }
   };
+
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
@@ -37,7 +48,11 @@ export default function LoginPage() {
             <h1 className="text-3xl font-bold text-gray-800 text-center mb-6">
               Welcome Back
             </h1>
-
+            {error && (
+              <div className="bg-red-100 text-red-600 p-3 rounded mb-4">
+                {error}
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -106,6 +121,8 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+     
     </div>
   );
 }
