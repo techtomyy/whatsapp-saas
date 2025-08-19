@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import AddPeopleToGroup from "../components/AddPeopleToGroup";
+import { useToast } from "../context/ToastContext";
 
 import {
   Search,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 
 export default function Contacts() {
+  const { showToast } = useToast();
 
   
   
@@ -26,8 +28,9 @@ export default function Contacts() {
   const [groupName, setGroupName] = useState("");
   const [phoneNumbers, setPhoneNumbers] = useState(["", "", "", ""]);
 
-  const contacts = [
+  const defaultContacts = [
     {
+      id: 1,
       name: "Sarah Johnson",
       phone: "+1 (555) 123-4567",
       type: "Individual",
@@ -35,6 +38,7 @@ export default function Contacts() {
       created: "May 12, 2025",
     },
     {
+      id: 2,
       name: "Michael Brown",
       phone: "+1 (555) 321-7654",
       type: "Individual",
@@ -42,6 +46,7 @@ export default function Contacts() {
       created: "April 14, 2025",
     },
     {
+      id: 3,
       name: "Marketing Team",
       phone: "+1 (555) 234-5678",
       type: "Group",
@@ -49,6 +54,7 @@ export default function Contacts() {
       created: "June 20, 2025",
     },
     {
+      id: 4,
       name: "David Wilson",
       phone: "+1 (555) 246-1357",
       type: "Individual",
@@ -56,6 +62,7 @@ export default function Contacts() {
       created: "July 5, 2025",
     },
     {
+      id: 5,
       name: "Amanda Rodriguez",
       phone: "+1 (555) 122-4545",
       type: "Individual",
@@ -63,6 +70,149 @@ export default function Contacts() {
       created: "June 10, 2024",
     },
   ];
+
+  const [contacts, setContacts] = useState(() => {
+    try {
+      const stored = localStorage.getItem('wb_contacts');
+      return stored ? JSON.parse(stored) : defaultContacts;
+    } catch (_) {
+      return defaultContacts;
+    }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('wb_contacts', JSON.stringify(contacts)); } catch (_) {}
+  }, [contacts]);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState("All Types");
+  const [filterTag, setFilterTag] = useState("All Tags");
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 5;
+  const fileInputRef = useRef(null);
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState(null); // contact object or null
+  const [form, setForm] = useState({ name: "", phone: "", type: "Individual", tags: "" });
+
+  const filteredContacts = useMemo(() => {
+    return contacts.filter((c) => {
+      const q = searchQuery.trim().toLowerCase();
+      const matchesQuery = !q || (c.name + " " + c.phone).toLowerCase().includes(q);
+      const matchesType = filterType === "All Types" || c.type === filterType;
+      const matchesTag = filterTag === "All Tags" || (Array.isArray(c.tags) && c.tags.includes(filterTag));
+      return matchesQuery && matchesType && matchesTag;
+    });
+  }, [contacts, searchQuery, filterType, filterTag]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredContacts.length / rowsPerPage));
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const currentRows = filteredContacts.slice(startIndex, startIndex + rowsPerPage);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [totalPages, currentPage]);
+
+  const openAddModal = () => {
+    setEditing(null);
+    setForm({ name: "", phone: "", type: "Individual", tags: "" });
+    setModalOpen(true);
+  };
+
+  const openEditModal = (contact) => {
+    setEditing(contact);
+    setForm({
+      name: contact.name,
+      phone: contact.phone,
+      type: contact.type,
+      tags: (contact.tags || []).join(", "),
+    });
+    setModalOpen(true);
+  };
+
+  const saveContact = (e) => {
+    e.preventDefault();
+    const tags = form.tags
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+    if (editing) {
+      setContacts(contacts.map((c) => (c.id === editing.id ? { ...c, name: form.name, phone: form.phone, type: form.type, tags } : c)));
+    } else {
+      const newContact = {
+        id: Date.now(),
+        name: form.name,
+        phone: form.phone,
+        type: form.type,
+        tags,
+        created: new Date().toLocaleDateString(),
+      };
+      setContacts([newContact, ...contacts]);
+    }
+    setModalOpen(false);
+    setEditing(null);
+  };
+
+  const deleteContact = (id) => {
+    if (window.confirm('Delete this contact?')) {
+      setContacts(contacts.filter((c) => c.id !== id));
+      showToast('Contact deleted', 'success');
+    }
+  };
+
+  const handleExport = () => {
+    const rows = [
+      ['name','phone','type','tags','created'],
+      ...filteredContacts.map((c) => [c.name, c.phone, c.type, (c.tags||[]).join('|'), c.created || ''])
+    ];
+    const csv = rows.map(r => r.map((v) => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'contacts.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast('Exported contacts.csv', 'success');
+  };
+
+  const handleImportClick = () => fileInputRef.current?.click();
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    if (lines.length === 0) return;
+    const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const nameIdx = header.indexOf('name');
+    const phoneIdx = header.indexOf('phone');
+    const typeIdx = header.indexOf('type');
+    const tagsIdx = header.indexOf('tags');
+    const createdIdx = header.indexOf('created');
+    const imported = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',');
+      if (!cols[nameIdx]) continue;
+      imported.push({
+        id: Date.now() + i,
+        name: cols[nameIdx]?.replace(/^\"|\"$/g, '') || '',
+        phone: cols[phoneIdx]?.replace(/^\"|\"$/g, '') || '',
+        type: cols[typeIdx]?.replace(/^\"|\"$/g, '') || 'Individual',
+        tags: (cols[tagsIdx]?.replace(/^\"|\"$/g, '') || '').split('|').filter(Boolean),
+        created: cols[createdIdx]?.replace(/^\"|\"$/g, '') || new Date().toLocaleDateString(),
+      });
+    }
+    if (imported.length) {
+      setContacts([...imported, ...contacts]);
+      showToast(`Imported ${imported.length} contact(s)`, 'success');
+    } else {
+      showToast('No contacts found in file', 'warning');
+    }
+    e.target.value = '';
+  };
 
   const handleContactSelection = (contactName) => {
     if (selectedContacts.includes(contactName)) {
@@ -109,7 +259,7 @@ export default function Contacts() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-6">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Contacts</h1>
@@ -117,37 +267,40 @@ export default function Contacts() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <button className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium">
+            <button onClick={openAddModal} className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium">
               <Plus className="w-4 h-4 inline mr-2" />
               Add Contact
             </button>
-            <button className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
+            <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportFile} />
+            <button onClick={handleImportClick} className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
               <Upload className="w-4 h-4 inline mr-2" />
               Import
             </button>
-            <button className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
+            <button onClick={handleExport} className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
               <Download className="w-4 h-4 inline mr-2" />
               Export
             </button>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-          <div className="flex flex-col md:flex-row gap-4">
+        <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-200">
+          <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
                 placeholder="Search contacts..."
+                value={searchQuery}
+                onChange={(e) => { setCurrentPage(1); setSearchQuery(e.target.value); }}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg   text-gray-600"
               />
             </div>
-            <select className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white text-gray-700">
+            <select value={filterType} onChange={(e) => { setCurrentPage(1); setFilterType(e.target.value); }} className="px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white text-gray-700">
               <option>All Types</option>
               <option>Individual</option>
               <option>Group</option>
             </select>
-            <select className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white text-gray-700">
+            <select value={filterTag} onChange={(e) => { setCurrentPage(1); setFilterTag(e.target.value); }} className="px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white text-gray-700">
               <option>All Tags</option>
               <option>Customer</option>
               <option>VIP</option>
@@ -183,7 +336,7 @@ export default function Contacts() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {contacts.map((contact, index) => (
+                {currentRows.map((contact, index) => (
                   <tr key={index} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
@@ -227,10 +380,10 @@ export default function Contacts() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex space-x-2">
-                        <button className="text-gray-400 hover:text-gray-600">
+                        <button onClick={() => openEditModal(contact)} className="text-gray-400 hover:text-gray-600">
                           <Edit className="w-4 h-4" />
                         </button>
-                        <button className="text-gray-400 hover:text-red-600">
+                        <button onClick={() => deleteContact(contact.id)} className="text-gray-400 hover:text-red-600">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -244,29 +397,80 @@ export default function Contacts() {
           <div className="px-6 py-4 border-t border-gray-200">
             <div className="flex items-center justify-between">
               <div className="text-sm text-gray-700">
-                Showing 1-5 of 50 contacts
+                Showing {filteredContacts.length === 0 ? 0 : startIndex + 1}-{Math.min(startIndex + currentRows.length, filteredContacts.length)} of {filteredContacts.length} contacts
               </div>
               <div className="flex items-center space-x-2">
-                <button className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50">
+                <button disabled={currentPage === 1} onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50" >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                <button className="px-3 py-2 text-sm font-medium text-green-600 bg-green-50 rounded-lg">
-                  1
-                </button>
-                <button className="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 rounded-lg">
-                  2
-                </button>
-                <button className="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 rounded-lg">
-                  3
-                </button>
-                <button className="p-2 text-gray-400 hover:text-gray-600">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                  <button key={p} onClick={() => setCurrentPage(p)} className={`px-3 py-2 text-sm font-medium rounded-lg ${currentPage === p ? 'text-green-600 bg-green-50' : 'text-gray-500 hover:text-gray-700'}`}>
+                    {p}
+                  </button>
+                ))}
+                <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50">
                   <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
           </div>
 
-          <AddPeopleToGroup />
+          {modalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+              <div className="bg-white w-full max-w-lg rounded-lg shadow-lg p-6">
+                <h3 className="text-lg font-semibold mb-4">{editing ? 'Edit Contact' : 'Add Contact'}</h3>
+                <form onSubmit={saveContact} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                    <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg" required />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                      <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        <option>Individual</option>
+                        <option>Group</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma separated)</label>
+                      <input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Customer, VIP" />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button type="button" onClick={() => { setModalOpen(false); setEditing(null); }} className="px-4 py-2 border rounded-lg">Cancel</button>
+                    <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg">Save</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          <AddPeopleToGroup
+            contacts={contacts}
+            onCreateGroup={({ groupName, phoneNumbers, selectedContactIds }) => {
+              const membersFromSaved = contacts
+                .filter(c => selectedContactIds.includes(c.id))
+                .map(c => c.name);
+              const membersFromNumbers = phoneNumbers
+                .map(p => p.number.trim())
+                .filter(Boolean);
+              const newGroup = {
+                id: Date.now(),
+                name: groupName,
+                phone: membersFromNumbers[0] || '',
+                type: 'Group',
+                tags: ['Internal'],
+                created: new Date().toLocaleDateString(),
+              };
+              setContacts([newGroup, ...contacts]);
+              showToast(`Group "${groupName}" created with ${membersFromSaved.length + membersFromNumbers.length} member(s).`, 'success');
+            }}
+          />
         </div>
       </div>
     </DashboardLayout>

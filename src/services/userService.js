@@ -1,19 +1,8 @@
+// Simple stub service for Admin actions; replace with real API calls later
+
 export const userService = {
-  updateUserStatus: async (userId, action) => {
-    // Replace with actual API call
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({ success: true });
-      }, 1000);
-    });
+  async updateUserStatus(userId, action) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return { success: true, userId, action };
   },
-  
-  updateProfile: async (data) => {
-    // Replace with actual API call
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({ success: true });
-      }, 1000);
-    });
-  }
 };

@@ -1,7 +1,7 @@
 import { AuthProvider } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import { useState } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Landing from "./pages/Landingpage";
 import SignUp from "./pages/SignUp";
 import Login from "./pages/Login";
@@ -17,6 +17,7 @@ import Security from "./pages/Security";
 import Billing from "./pages/Billing";
 import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 import "./index.css";
 
@@ -32,17 +33,18 @@ function App() {
             <Route path="/signup" element={<SignUp />} />
             <Route path="/login" element={<Login />} />
             <Route path="/features" element={<Features />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/contacts" element={<Contacts />} />
-            <Route path="/composer" element={<Composer />} />
-            <Route path="/logs" element={<Logs />} />
-            <Route path="/templates" element={<Templates />} />
-            <Route path="/automations" element={<Automations />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/security" element={<Security />} />
-            <Route path="/billing" element={<Billing />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/admin" element={<Admin />} />
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
+            <Route path="/composer" element={<ProtectedRoute><Composer /></ProtectedRoute>} />
+            <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
+            <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
+            <Route path="/automations" element={<ProtectedRoute><Automations /></ProtectedRoute>} />
+            <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+            <Route path="/security" element={<ProtectedRoute><Security /></ProtectedRoute>} />
+            <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>
       </ToastProvider>

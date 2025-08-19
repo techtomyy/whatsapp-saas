@@ -101,18 +101,18 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
     <>
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          className="fixed inset-0 bg-transparent z-40 md:hidden"
           onClick={toggleSidebar}
         />
       )}
 
       <div className={`
-        fixed md:static inset-y-0 left-0 z-50
+        fixed top-0 left-0 z-50
         transform transition-transform duration-300 ease-in-out
-        ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-        w-64 bg-white shadow-sm border-r border-gray-200 flex flex-col
+        ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} md:translate-x-0
+        w-64 bg-white shadow-sm border-r border-gray-200 flex flex-col h-screen overflow-y-hidden
       `}>
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+        <div className="p-4 md:p-6 border-b border-gray-200 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <img
               src={logo}
@@ -131,7 +131,7 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
           </button>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-2 md:p-4 space-y-1 overflow-hidden">
           {sidebarItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (

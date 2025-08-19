@@ -6,8 +6,8 @@ import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({
-    username: "",
-    password: "",
+    username: "demo",
+    password: "demo123",
   });
 
   const [showPassword, setShowPassword] = useState(false);
@@ -66,7 +66,7 @@ export default function LoginPage() {
                     value={formData.username}
                     onChange={handleInputChange}
                     className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-colors"
-                    placeholder="Enter your username"
+                    placeholder="Enter your username (try demo)"
                   />
                 </div>
               </div>
@@ -83,7 +83,7 @@ export default function LoginPage() {
                     value={formData.password}
                     onChange={handleInputChange}
                     className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-colors"
-                    placeholder="Enter your password"
+                    placeholder="Enter your password (try demo123)"
                   />
                   <button
                     type="button"

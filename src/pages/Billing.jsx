@@ -1,11 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import DashboardLayout from "../components/DashboardLayout";
 import { Check, X, Crown, MessageSquare, Mail, BookOpen, CreditCard, Plus } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 const BillingDashboard = () => {
-  const [currentPlan, setCurrentPlan] = useState('Pro');
+  const { showToast } = useToast();
+  const [currentPlan, setCurrentPlan] = useState(() => {
+    try { return localStorage.getItem('wb_plan') || 'Pro'; } catch (_) { return 'Pro'; }
+  });
   const [showAddPayment, setShowAddPayment] = useState(false);
   const [newCardNumber, setNewCardNumber] = useState('');
+  const [confirmModal, setConfirmModal] = useState({ open: false, title: '', message: '', onConfirm: null });
 
   // Current plan usage data
   const [usageData] = useState({
@@ -15,94 +20,81 @@ const BillingDashboard = () => {
   });
 
   // Billing history data
-  const [billingHistory] = useState([
-    { date: 'July 1, 2025', plan: 'Pro Plan - Monthly', amount: '$49.00' },
-    { date: 'June 1, 2025', plan: 'Pro Plan - Monthly', amount: '$49.00' },
-    { date: 'May 1, 2025', plan: 'Pro Plan - Monthly', amount: '$49.00' },
-    { date: 'April 1, 2025', plan: 'Pro Plan - Monthly', amount: '$49.00' }
-  ]);
+  const [billingHistory, setBillingHistory] = useState(() => {
+    try {
+      const s = localStorage.getItem('wb_billing_history');
+      return s ? JSON.parse(s) : [
+        { date: 'July 1, 2025', plan: 'Pro Plan - Monthly', amount: '$49.00' },
+        { date: 'June 1, 2025', plan: 'Pro Plan - Monthly', amount: '$49.00' },
+        { date: 'May 1, 2025', plan: 'Pro Plan - Monthly', amount: '$49.00' },
+        { date: 'April 1, 2025', plan: 'Pro Plan - Monthly', amount: '$49.00' }
+      ];
+    } catch (_) {
+      return [];
+    }
+  });
 
   // Payment methods data
-  const [paymentMethods, setPaymentMethods] = useState([
-    { id: 1, type: 'visa', number: '4242', expiry: '12/26', default: true }
-  ]);
+  const [paymentMethods, setPaymentMethods] = useState(() => {
+    try { const s = localStorage.getItem('wb_payment_methods'); return s ? JSON.parse(s) : [{ id: 1, type: 'visa', number: '4242', expiry: '12/26', default: true }]; } catch (_) { return [{ id: 1, type: 'visa', number: '4242', expiry: '12/26', default: true }]; }
+  });
+
+  useEffect(() => { try { localStorage.setItem('wb_plan', currentPlan); } catch (_) {} }, [currentPlan]);
+  useEffect(() => { try { localStorage.setItem('wb_payment_methods', JSON.stringify(paymentMethods)); } catch (_) {} }, [paymentMethods]);
+  useEffect(() => { try { localStorage.setItem('wb_billing_history', JSON.stringify(billingHistory)); } catch (_) {} }, [billingHistory]);
 
   // Plans data
   const plans = {
-    Free: {
-      price: 0,
-      description: 'Perfect for trying out the platform',
-      features: {
-        messages: '100 messages/month',
-        contacts: 'Up to 100 contacts',
-        whatsapp: '1 WhatsApp account',
-        automations: false
-      }
-    },
-    Pro: {
-      price: 49,
-      description: 'For growing businesses',
-      features: {
-        messages: '1,250 messages/month',
-        contacts: 'Up to 5,000 contacts',
-        whatsapp: '2 WhatsApp accounts',
-        automations: 'Basic Automations'
-      }
-    },
-    Business: {
-      price: 99,
-      description: 'For larger organizations',
-      features: {
-        messages: '5,000 messages/month',
-        contacts: 'Up to 25,000 contacts',
-        whatsapp: '5 WhatsApp accounts',
-        automations: 'Advanced Automations'
-      }
-    }
+    Free: { price: 0, description: 'Perfect for trying out the platform', features: { messages: '100 messages/month', contacts: 'Up to 100 contacts', whatsapp: '1 WhatsApp account', automations: false } },
+    Pro: { price: 49, description: 'For growing businesses', features: { messages: '1,250 messages/month', contacts: 'Up to 5,000 contacts', whatsapp: '2 WhatsApp accounts', automations: 'Basic Automations' } },
+    Business: { price: 99, description: 'For larger organizations', features: { messages: '5,000 messages/month', contacts: 'Up to 25,000 contacts', whatsapp: '5 WhatsApp accounts', automations: 'Advanced Automations' } }
   };
 
   const handlePlanChange = (planName) => {
     setCurrentPlan(planName);
+    showToast(`${planName} plan selected`, 'success');
   };
 
   const handleCancelSubscription = () => {
-    if (window.confirm('Are you sure you want to cancel your subscription?')) {
-      alert('Subscription cancelled. You will continue to have access until the end of your billing period.');
-    }
+    setConfirmModal({
+      open: true,
+      title: 'Cancel Subscription',
+      message: 'You will continue to have access until the end of your billing period.',
+      onConfirm: () => { setConfirmModal({ open: false }); showToast('Subscription cancelled', 'success'); }
+    });
   };
 
-  const handleUpgradePlan = () => {
-    alert('Redirecting to payment processor...');
+  const handleUpgradePlan = (planName) => {
+    const target = planName || (currentPlan === 'Free' ? 'Pro' : 'Business');
+    setCurrentPlan(target);
+    const price = plans[target].price;
+    const entry = { date: new Date().toLocaleDateString(), plan: `${target} Plan - Monthly`, amount: `$${price}.00` };
+    setBillingHistory([entry, ...billingHistory]);
+    showToast(`Upgraded to ${target}`, 'success');
   };
 
   const handleDowngrade = () => {
-    if (window.confirm('Are you sure you want to downgrade to the Free plan?')) {
-      setCurrentPlan('Free');
-      alert('Plan downgraded successfully!');
-    }
+    setConfirmModal({
+      open: true,
+      title: 'Downgrade Plan',
+      message: 'Downgrade to the Free plan?',
+      onConfirm: () => { setCurrentPlan('Free'); setConfirmModal({ open: false }); showToast('Plan downgraded to Free', 'success'); }
+    });
   };
 
   const addPaymentMethod = () => {
-    if (newCardNumber.length >= 4) {
-      const newMethod = {
-        id: paymentMethods.length + 1,
-        type: 'visa',
-        number: newCardNumber.slice(-4),
-        expiry: '12/28',
-        default: false
-      };
-      setPaymentMethods([...paymentMethods, newMethod]);
-      setNewCardNumber('');
-      setShowAddPayment(false);
-      alert('Payment method added successfully!');
-    }
+    const digits = newCardNumber.replace(/\D/g, '');
+    if (digits.length < 12) { showToast('Enter a valid card number (min 12 digits, demo)', 'warning'); return; }
+    const newMethod = { id: paymentMethods.length + 1, type: 'visa', number: digits.slice(-4), expiry: '12/28', default: false };
+    setPaymentMethods([...paymentMethods, newMethod]);
+    setNewCardNumber('');
+    setShowAddPayment(false);
+    showToast('Payment method added', 'success');
   };
 
   const setDefaultPayment = (id) => {
-    setPaymentMethods(paymentMethods.map(method => ({
-      ...method,
-      default: method.id === id
-    })));
+    setPaymentMethods(paymentMethods.map(method => ({ ...method, default: method.id === id })));
+    showToast('Default payment method updated', 'success');
   };
 
   const ProgressBar = ({ used, total, percentage }) => (
@@ -171,16 +163,9 @@ const BillingDashboard = () => {
         >
           Current Plan
         </button>
-      ) : planName === 'Free' && currentPlan === 'Pro' ? (
-        <button
-          onClick={handleDowngrade}
-          className="w-full py-2 px-4 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
-        >
-          Downgrade
-        </button>
       ) : (
         <button
-          onClick={handleUpgradePlan}
+          onClick={() => handleUpgradePlan(planName)}
           className="w-full py-2 px-4 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
         >
           Upgrade
@@ -191,7 +176,7 @@ const BillingDashboard = () => {
 
   return (
     <DashboardLayout>
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Billing & Subscription</h1>
@@ -206,14 +191,14 @@ const BillingDashboard = () => {
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <Crown className="w-6 h-6 text-green-600" />
-                <h2 className="text-xl font-semibold text-gray-900">Pro Plan</h2>
+                <h2 className="text-xl font-semibold text-gray-900">{currentPlan} Plan</h2>
                 <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
                   Active
                 </span>
               </div>
             </div>
             
-            <p className="text-gray-600 mb-6">$49.00, billed monthly</p>
+            <p className="text-gray-600 mb-6">${plans[currentPlan].price}.00, billed monthly</p>
 
             {/* Usage Statistics */}
             <div className="space-y-4 mb-6">
@@ -250,7 +235,7 @@ const BillingDashboard = () => {
 
             <div className="flex gap-3">
               <button
-                onClick={handleUpgradePlan}
+                onClick={() => handleUpgradePlan()}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
               >
                 Upgrade Plan
@@ -378,7 +363,7 @@ const BillingDashboard = () => {
               ))}
             </div>
             
-            <button className="w-full mt-4 text-green-600 hover:text-green-800 font-medium text-sm transition-colors">
+            <button onClick={() => showToast('Opening invoices (demo)', 'success')} className="w-full mt-4 text-green-600 hover:text-green-800 font-medium text-sm transition-colors">
               View All Invoices
             </button>
           </div>
@@ -391,7 +376,7 @@ const BillingDashboard = () => {
             </p>
             
             <div className="space-y-4">
-              <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg hover:bg-green-100 transition-colors cursor-pointer">
+              <div onClick={() => showToast('Connecting to support chat (demo)', 'success')} className="flex items-center gap-3 p-3 bg-green-50 rounded-lg hover:bg-green-100 transition-colors cursor-pointer">
                 <MessageSquare className="w-5 h-5 text-green-600" />
                 <div>
                   <div className="font-medium text-green-900">Chat with Support</div>
@@ -399,7 +384,7 @@ const BillingDashboard = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors cursor-pointer">
+              <div onClick={() => showToast('Email sent to support (demo)', 'success')} className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors cursor-pointer">
                 <Mail className="w-5 h-5 text-blue-600" />
                 <div>
                   <div className="font-medium text-blue-900">Email Support</div>
@@ -407,7 +392,7 @@ const BillingDashboard = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors cursor-pointer">
+              <div onClick={() => showToast('Opening knowledge base (demo)', 'success')} className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors cursor-pointer">
                 <BookOpen className="w-5 h-5 text-purple-600" />
                 <div>
                   <div className="font-medium text-purple-900">Knowledge Base</div>
@@ -418,6 +403,19 @@ const BillingDashboard = () => {
           </div>
         </div>
       </div>
+
+      {confirmModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white w-full max-w-md rounded-lg shadow-lg p-6">
+            <h3 className="text-lg font-semibold mb-2">{confirmModal.title}</h3>
+            <p className="text-sm text-gray-600 mb-4">{confirmModal.message}</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setConfirmModal({ open: false })} className="px-4 py-2 border rounded-lg">Cancel</button>
+              <button onClick={() => confirmModal.onConfirm && confirmModal.onConfirm()} className="px-4 py-2 bg-red-600 text-white rounded-lg">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     </DashboardLayout>
   );

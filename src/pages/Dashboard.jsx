@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
 import {
   TrendingUp,
@@ -31,6 +32,7 @@ ChartJS.register(
 );
 
 export default function WhatsAppDashboard() {
+  const navigate = useNavigate();
   const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   const data = {
@@ -107,19 +109,19 @@ export default function WhatsAppDashboard() {
     { name: "Feedback Request", type: "Scheduled", status: "Paused", lastRun: "2d ago", statusColor: "bg-yellow-100 text-yellow-600" },
   ];
 
-  // Button Handlers (You can replace with actual navigation/API calls later)
-  const handleCompose = () => alert("Compose Message Clicked");
-  const handleAddContact = () => alert("Add Contact Clicked");
-  const handleCreateTemplate = () => alert("Create Template Clicked");
-  const handleManagePlan = () => alert("Redirecting to Plan Management...");
-  const handleViewMessages = () => alert("Redirecting to All Messages...");
-  const handleViewAutomations = () => alert("Redirecting to All Automations...");
+  // Button Handlers
+  const handleCompose = () => navigate('/composer');
+  const handleAddContact = () => navigate('/contacts');
+  const handleCreateTemplate = () => navigate('/templates');
+  const handleManagePlan = () => navigate('/billing');
+  const handleViewMessages = () => navigate('/logs');
+  const handleViewAutomations = () => navigate('/automations');
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-gray-600">Welcome back, John!</p>
         </div>
         
@@ -151,7 +153,7 @@ export default function WhatsAppDashboard() {
         {/* Chart + Quick Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Message Activity</h3>
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Message Activity</h3>
             <Line data={data} options={options} />
           </div>
 

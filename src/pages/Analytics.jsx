@@ -1,95 +1,52 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer } from "recharts";
 import { ChevronDown, Download } from "lucide-react";
+import { useToast } from "../context/ToastContext";
 
 const AnalyticsDashboard = () => {
+  const { showToast } = useToast();
   const [selectedPeriod, setSelectedPeriod] = useState("Last 7 days");
   const [selectedMetric, setSelectedMetric] = useState("Total Messages");
 
-  // Sample data for the chart
-  const chartData = [
-    {
-      day: "Mon",
-      totalMessages: 80,
-      deliveryRate: 78,
-      readRate: 76,
-      responseRate: 74,
-    },
-    {
-      day: "Tue",
-      totalMessages: 90,
-      deliveryRate: 88,
-      readRate: 85,
-      responseRate: 82,
-    },
-    {
-      day: "Wed",
-      totalMessages: 100,
-      deliveryRate: 98,
-      readRate: 95,
-      responseRate: 90,
-    },
-    {
-      day: "Thu",
-      totalMessages: 85,
-      deliveryRate: 83,
-      readRate: 80,
-      responseRate: 78,
-    },
-    {
-      day: "Fri",
-      totalMessages: 115,
-      deliveryRate: 112,
-      readRate: 108,
-      responseRate: 105,
-    },
-    {
-      day: "Sat",
-      totalMessages: 125,
-      deliveryRate: 122,
-      readRate: 118,
-      responseRate: 115,
-    },
-    {
-      day: "Sun",
-      totalMessages: 130,
-      deliveryRate: 127,
-      readRate: 123,
-      responseRate: 120,
-    },
-  ];
+  const generateChartData = (period) => {
+    if (period === 'Last 7 days') {
+      const labels = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+      return labels.map((day, i) => ({
+        day,
+        totalMessages: 80 + i * 10,
+        deliveryRate: 75 + i,
+        readRate: 70 + i,
+        responseRate: 60 + Math.max(0, 6 - i),
+      }));
+    }
+    if (period === 'Last 30 days') {
+      return Array.from({ length: 30 }, (_, i) => ({
+        day: `${i + 1}`,
+        totalMessages: 70 + Math.round(20 * Math.sin(i / 5) + 20 * Math.random()),
+        deliveryRate: 80 + Math.round(5 * Math.sin(i / 7)),
+        readRate: 75 + Math.round(5 * Math.cos(i / 6)),
+        responseRate: 55 + Math.round(8 * Math.sin(i / 4)),
+      }));
+    }
+    return Array.from({ length: 12 }, (_, i) => ({
+      day: `W${i + 1}`,
+      totalMessages: 400 + Math.round(100 * Math.sin(i / 2)),
+      deliveryRate: 90 + Math.round(4 * Math.cos(i / 3)),
+      readRate: 82 + Math.round(4 * Math.sin(i / 3)),
+      responseRate: 60 + Math.round(6 * Math.cos(i / 2)),
+    }));
+  };
+
+  const [chartData, setChartData] = useState(generateChartData(selectedPeriod));
+  useEffect(() => { setChartData(generateChartData(selectedPeriod)); }, [selectedPeriod]);
 
   // Template performance data
   const templateData = [
-    {
-      template: "Welcome Message",
-      sent: 324,
-      delivered: "99%",
-      read: "95%",
-      response: "72%",
-    },
-    {
-      template: "Appointment Reminder",
-      sent: 246,
-      delivered: "98%",
-      read: "92%",
-      response: "68%",
-    },
-    {
-      template: "Product Inquiry Response",
-      sent: 189,
-      delivered: "97%",
-      read: "90%",
-      response: "65%",
-    },
-    {
-      template: "Weekly Newsletter",
-      sent: 152,
-      delivered: "96%",
-      read: "85%",
-      response: "42%",
-    },
+    { template: "Welcome Message", sent: 324, delivered: "99%", read: "95%", response: "72%" },
+    { template: "Appointment Reminder", sent: 246, delivered: "98%", read: "92%", response: "68%" },
+    { template: "Product Inquiry Response", sent: 189, delivered: "97%", read: "90%", response: "65%" },
+    { template: "Weekly Newsletter", sent: 152, delivered: "96%", read: "85%", response: "42%" },
   ];
 
   // Contact engagement heatmap data
@@ -113,7 +70,7 @@ const AnalyticsDashboard = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-6 bg-gray-50 min-h-screen">
+      <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
           <div>
@@ -135,7 +92,19 @@ const AnalyticsDashboard = () => {
               </select>
               <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
             </div>
-            <button className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-4 py-2 hover:bg-gray-50 transition-colors">
+            <button onClick={() => {
+              const headers = ['Label', selectedMetric];
+              const key = getMetricKey(selectedMetric);
+              const rows = chartData.map(d => [d.day, d[key]]);
+              const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url; a.setAttribute('download', 'analytics.csv');
+              document.body.appendChild(a); a.click(); document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+              showToast('Exported analytics.csv', 'success');
+            }} className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-4 py-2 hover:bg-gray-50 transition-colors">
               <Download className="w-4 h-4" />
               Export
             </button>
@@ -238,7 +207,7 @@ const AnalyticsDashboard = () => {
                       : "text-gray-400 hover:text-gray-600"
                   }`}
                 >
-                  <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                  <div className="w-2 h-2 bg-purple-500 rounded_full"></div>
                   Response Rate
                 </button>
               </div>
@@ -338,14 +307,12 @@ const AnalyticsDashboard = () => {
                 {Array.from({ length: 56 }, (_, i) => {
                   const intensity = Math.random();
 
-                  // map intensity to categories
-                  let bgColor = "#ef4444"; // default = Unresponsive
-                  if (intensity > 0.8) bgColor = "#22c55e"; // Active
-                  else if (intensity > 0.6)
-                    bgColor = "#84cc16"; // Moderately Active
-                  else if (intensity > 0.4) bgColor = "#eab308"; // Low Activity
-                  else if (intensity > 0.2) bgColor = "#f97316"; // Inactive
-                  else bgColor = "#ef4444"; // Unresponsive
+                  let bgColor = "#ef4444";
+                  if (intensity > 0.8) bgColor = "#22c55e";
+                  else if (intensity > 0.6) bgColor = "#84cc16";
+                  else if (intensity > 0.4) bgColor = "#eab308";
+                  else if (intensity > 0.2) bgColor = "#f97316";
+                  else bgColor = "#ef4444";
 
                   return (
                     <button
@@ -355,13 +322,7 @@ const AnalyticsDashboard = () => {
                       title={`Day ${i + 1}: ${Math.floor(
                         intensity * 100
                       )}% engagement`}
-                      onClick={() =>
-                        alert(
-                          `Day ${i + 1} - Engagement: ${Math.floor(
-                            intensity * 100
-                          )}%`
-                        )
-                      }
+                      onClick={() => showToast(`Day ${i + 1} engagement ${Math.floor(intensity * 100)}%`, 'success')}
                     />
                   );
                 })}

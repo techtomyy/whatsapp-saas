@@ -10,8 +10,10 @@ import {
   Calendar,
   Upload,
 } from "lucide-react";
+import { useToast } from "../context/ToastContext";
 
 const MessageLogs = () => {
+  const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [fromDate, setFromDate] = useState("");
@@ -19,7 +21,7 @@ const MessageLogs = () => {
   const [currentPage, setCurrentPage] = useState(1);
 
   // Example data
-  const messages = [
+  const [messages, setMessages] = useState([
     {
       recipient: "Sarah Johnson",
       content: "Hello! Just confirming our meeting ...",
@@ -104,7 +106,32 @@ const MessageLogs = () => {
       status: "Delivered",
       timestamp: "2025-07-01 07:00",
     },
-  ];
+  ]);
+
+  // Load additional logs created by Composer from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('wb_logs');
+      if (!stored) return;
+      const logs = JSON.parse(stored);
+      const rows = logs.flatMap((log) => {
+        const status = log.scheduled ? 'Pending' : 'Delivered';
+        const ts = log.scheduled && log.date && log.time
+          ? `${log.date} ${log.time}`
+          : new Date(log.createdAt || Date.now()).toISOString().slice(0,16).replace('T',' ');
+        const content = log.type === 'text' ? (log.message || '') : log.type === 'link' ? (log.message || '') : (log.attachmentName || `${log.type} attachment`);
+        return (log.recipients || ["Unknown"]).map((r) => ({
+          recipient: r,
+          content,
+          type: (log.type || 'Text').toString().charAt(0).toUpperCase() + (log.type || 'text').toString().slice(1),
+          status,
+          timestamp: ts,
+        }));
+      });
+      if (rows.length) setMessages((prev) => [...rows, ...prev]);
+    } catch (_) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // badge helper
   const getStatusBadge = (status) => {
@@ -125,9 +152,22 @@ const MessageLogs = () => {
     );
   };
 
-  const exportLogs = () => {
-    // use Upload icon (arrow up) for export
-    alert("Exported (demo)");
+  const exportLogs = (rows) => {
+    const headers = ["Recipient","Content","Type","Status","Timestamp"];
+    const data = rows.map(r => [r.recipient, r.content, r.type, r.status, r.timestamp]);
+    const csv = [headers, ...data]
+      .map(r => r.map(v => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.setAttribute('download', 'message_logs.csv');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Exported message_logs.csv', 'success');
   };
 
   // --- Pagination / filtering logic ---
@@ -169,7 +209,7 @@ const MessageLogs = () => {
         {/* Full-width container for large screens */}
         <div className="w-full px-2 sm:px-4 lg:px-6">
           {/* Header */}
-          <div className="px-4 sm:px-6 py-4 bg-white">
+          <div className="px-3 sm:px-6 py-3 sm:py-4 bg-white">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
                 <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
@@ -180,7 +220,7 @@ const MessageLogs = () => {
                 </p>
               </div>
               <button
-                onClick={exportLogs}
+                onClick={() => exportLogs(filteredMessages)}
                 className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm sm:text-base"
               >
                 <Upload className="w-4 h-4" />
@@ -305,12 +345,8 @@ const MessageLogs = () => {
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex items-center gap-2">
-                          <button className="p-1 hover:bg-gray-100 rounded-full transition-colors">
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button className="p-1 hover:bg-gray-100 rounded-full transition-colors">
-                            <RefreshCw className="w-4 h-4" />
-                          </button>
+                          <ViewButton row={message} />
+                          <ResendButton row={message} onResent={(updated) => setMessages(prev => prev.map(p => (p === message ? updated : p)))} />
                         </div>
                       </td>
                     </tr>
@@ -380,3 +416,58 @@ const MessageLogs = () => {
 };
 
 export default MessageLogs;
+
+// Inline helper components for row actions
+function ViewButton({ row }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button onClick={() => setOpen(true)} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
+        <Eye className="w-4 h-4" />
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white w-full max-w-lg rounded-lg shadow-lg p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Message Details</h3>
+              <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div><span className="text-gray-500">Recipient:</span> <span className="font-medium">{row.recipient}</span></div>
+              <div><span className="text-gray-500">Type:</span> <span className="font-medium">{row.type}</span></div>
+              <div><span className="text-gray-500">Status:</span> <span className="font-medium">{row.status}</span></div>
+              <div><span className="text-gray-500">Timestamp:</span> <span className="font-medium">{row.timestamp}</span></div>
+              <div className="pt-2">
+                <div className="text-gray-500 mb-1">Content</div>
+                <div className="p-3 bg-gray-50 rounded border text-gray-800 break-words">{row.content || '—'}</div>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button onClick={() => setOpen(false)} className="px-4 py-2 border rounded-lg">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function ResendButton({ row, onResent }) {
+  const { showToast } = useToast();
+  const handle = () => {
+    const d = new Date();
+    const yy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    const updated = { ...row, status: 'Delivered', timestamp: `${yy}-${mm}-${dd} ${hh}:${mi}` };
+    onResent(updated);
+    showToast('Message resent', 'success');
+  };
+  return (
+    <button onClick={handle} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
+      <RefreshCw className="w-4 h-4" />
+    </button>
+  );
+}

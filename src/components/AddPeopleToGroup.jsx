@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, ChevronDown } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
-const AddPeopleToGroup = () => {
+const AddPeopleToGroup = ({ contacts: providedContacts = [], onCreateGroup }) => {
+  const { showToast } = useToast();
   const countries = [
     { code: 'AF', name: 'Afghanistan', dialCode: '+93', flag: '🇦🇫' },
     { code: 'AL', name: 'Albania', dialCode: '+355', flag: '🇦🇱' },
@@ -51,12 +53,16 @@ const AddPeopleToGroup = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [dropdownStates, setDropdownStates] = useState({});
 
-  const savedContacts = [
-    { id: 1, name: 'Sarah Johnson', selected: true },
-    { id: 2, name: 'Michael Brown', selected: true }
-  ];
-
-  const [contacts, setContacts] = useState(savedContacts);
+  // Build selectable contacts from provided list
+  const [contacts, setContacts] = useState(() =>
+    (providedContacts || []).map(c => ({ id: c.id, name: c.name, selected: false }))
+  );
+  useEffect(() => {
+    setContacts(prev => {
+      const selectionById = new Map(prev.map(c => [c.id, c.selected]));
+      return (providedContacts || []).map(c => ({ id: c.id, name: c.name, selected: selectionById.get(c.id) || false }));
+    });
+  }, [providedContacts]);
 
   const handleContactToggle = (contactId) => {
     setContacts(prev => prev.map(contact => 
@@ -119,6 +125,30 @@ const AddPeopleToGroup = () => {
     contact.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const selectedContactIds = useMemo(() => contacts.filter(c => c.selected).map(c => c.id), [contacts]);
+
+  const createGroup = () => {
+    if (!groupName.trim()) {
+      showToast('Please enter a group name', 'warning');
+      return;
+    }
+    if (selectedContactIds.length === 0 && phoneNumbers.every(p => !p.number.trim())) {
+      showToast('Select at least one saved contact or enter a phone number', 'warning');
+      return;
+    }
+    if (typeof onCreateGroup === 'function') {
+      onCreateGroup({
+        groupName: groupName.trim(),
+        phoneNumbers,
+        selectedContactIds,
+      });
+      setGroupName('');
+      setPhoneNumbers([{ country: 'PK', number: '' }]);
+      setContacts(contacts.map(c => ({ ...c, selected: false })));
+      setSearchTerm('');
+    }
+  };
+
   const CountryDropdown = ({ index }) => {
     const currentCountry = getCurrentCountry(index);
     const isOpen = dropdownStates[index];
@@ -173,7 +203,7 @@ const AddPeopleToGroup = () => {
             onChange={(e) => setGroupName(e.target.value)}
             className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
           />
-          <button className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+          <button onClick={createGroup} className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium transition-colors">
             Create Group
           </button>
         </div>
@@ -203,7 +233,7 @@ const AddPeopleToGroup = () => {
             ))}
           </div>
           
-          <button className="w-full mt-6 bg-green-500 hover:bg-green-600 text-white py-3 rounded-lg font-medium transition-colors">
+          <button onClick={createGroup} className="w-full mt-6 bg-green-500 hover:bg-green-600 text-white py-3 rounded-lg font-medium transition-colors">
             Add to group
           </button>
         </div>

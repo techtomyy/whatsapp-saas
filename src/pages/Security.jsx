@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import {
   Laptop,
@@ -8,11 +8,19 @@ import {
   AlertTriangle,
   Shield,
 } from "lucide-react";
+import { useToast } from "../context/ToastContext";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const SecurityDashboard = () => {
+  const { showToast } = useToast();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [ipInput, setIpInput] = useState("");
   const [ipRestrictions, setIpRestrictions] = useState([]);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [accountDeactivated, setAccountDeactivated] = useState(false);
 
   // Login activity data
   const [loginActivity] = useState([
@@ -73,6 +81,25 @@ const SecurityDashboard = () => {
     },
   ]);
 
+  // hydrate from localStorage
+  useEffect(() => {
+    try {
+      const s2fa = localStorage.getItem('wb_sec_2fa');
+      if (s2fa) setTwoFactorEnabled(JSON.parse(s2fa));
+      const sips = localStorage.getItem('wb_sec_ips');
+      if (sips) setIpRestrictions(JSON.parse(sips));
+      const sdev = localStorage.getItem('wb_sec_devices');
+      if (sdev) setDevices(JSON.parse(sdev));
+      const sdeact = localStorage.getItem('wb_sec_deactivated');
+      if (sdeact) setAccountDeactivated(JSON.parse(sdeact));
+    } catch (_) {}
+  }, []);
+
+  useEffect(() => { try { localStorage.setItem('wb_sec_2fa', JSON.stringify(twoFactorEnabled)); } catch (_) {} }, [twoFactorEnabled]);
+  useEffect(() => { try { localStorage.setItem('wb_sec_ips', JSON.stringify(ipRestrictions)); } catch (_) {} }, [ipRestrictions]);
+  useEffect(() => { try { localStorage.setItem('wb_sec_devices', JSON.stringify(devices)); } catch (_) {} }, [devices]);
+  useEffect(() => { try { localStorage.setItem('wb_sec_deactivated', JSON.stringify(accountDeactivated)); } catch (_) {} }, [accountDeactivated]);
+
   const getDeviceIcon = (type) => {
     switch (type) {
       case "laptop":
@@ -88,27 +115,36 @@ const SecurityDashboard = () => {
 
   const handleLogout = (deviceId) => {
     if (devices.find((d) => d.id === deviceId)?.current) {
-      alert("Cannot logout from current device");
+      showToast('Cannot logout from current device', 'warning');
       return;
     }
     setDevices(devices.filter((device) => device.id !== deviceId));
+    showToast('Device logged out', 'success');
   };
 
   const handleLogoutAll = () => {
     setDevices(devices.filter((device) => device.current));
+    showToast('Logged out from all other devices', 'success');
   };
 
   const addIpRestriction = () => {
-    if (ipInput.trim() && !ipRestrictions.includes(ipInput.trim())) {
-      setIpRestrictions([...ipRestrictions, ipInput.trim()]);
-      setIpInput("");
-    }
+    const value = ipInput.trim();
+    if (!value) { showToast('Please enter an IP or CIDR', 'warning'); return; }
+    // very basic IPv4 or CIDR validation
+    const ipv4 = /^(25[0-5]|2[0-4]\d|[01]?\d\d?)(\.(25[0-5]|2[0-4]\d|[01]?\d\d?)){3}$/;
+    const cidr = new RegExp(`^${ipv4.source}\/([0-9]|[12][0-9]|3[0-2])$`);
+    if (!ipv4.test(value) && !cidr.test(value)) { showToast('Invalid IP/CIDR format', 'warning'); return; }
+    if (ipRestrictions.includes(value)) { showToast('IP already added', 'warning'); return; }
+    setIpRestrictions([...ipRestrictions, value]);
+    setIpInput("");
+    showToast('IP restriction added', 'success');
   };
 
   const removeIpRestriction = (ip) => {
     setIpRestrictions(
       ipRestrictions.filter((restriction) => restriction !== ip)
     );
+    showToast('IP restriction removed', 'success');
   };
 
   const handleKeyPress = (e) => {
@@ -168,6 +204,14 @@ const SecurityDashboard = () => {
                     ? "bg-green-600 text-white hover:bg-green-700"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
+                onClick={() => {
+                  if (twoFactorEnabled) {
+                    showToast('2FA configuration opened (demo)', 'success');
+                  } else {
+                    setTwoFactorEnabled(true);
+                    showToast('2FA enabled (demo)', 'success');
+                  }
+                }}
               >
                 {twoFactorEnabled ? "Configure 2FA" : "Set Up 2FA"}
               </button>
@@ -346,7 +390,7 @@ const SecurityDashboard = () => {
                 ))}
               </div>
 
-              <button className="text-green-600 hover:text-green-800 text-sm font-medium">
+              <button onClick={() => navigate('/logs')} className="text-green-600 hover:text-green-800 text-sm font-medium">
                 View all activity
               </button>
             </div>
@@ -367,7 +411,7 @@ const SecurityDashboard = () => {
                   <p className="text-sm text-gray-600 mb-3">
                     Change your account password.
                   </p>
-                  <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
+                  <button onClick={() => { showToast('Password reset email sent (demo)', 'success'); }} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
                     Reset Password
                   </button>
                 </div>
@@ -380,8 +424,8 @@ const SecurityDashboard = () => {
                   <p className="text-sm text-gray-600 mb-3">
                     Temporarily disable your account.
                   </p>
-                  <button className="px-4 py-2 bg-orange-100 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-200 transition-colors">
-                    Deactivate
+                  <button onClick={() => { setAccountDeactivated(!accountDeactivated); showToast(accountDeactivated ? 'Account reactivated (demo)' : 'Account deactivated (demo)', 'success'); }} className="px-4 py-2 bg-orange-100 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-200 transition-colors">
+                    {accountDeactivated ? 'Reactivate' : 'Deactivate'}
                   </button>
                 </div>
 
@@ -393,7 +437,7 @@ const SecurityDashboard = () => {
                   <p className="text-sm text-gray-600 mb-3">
                     Permanently delete your account and all data.
                   </p>
-                  <button className="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors">
+                  <button onClick={() => setConfirmDeleteOpen(true)} className="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors">
                     Delete Account
                   </button>
                 </div>
@@ -401,6 +445,33 @@ const SecurityDashboard = () => {
             </div>
           </div>
         </div>
+        {confirmDeleteOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="bg-white w-full max-w-md rounded-lg shadow-lg p-6">
+              <h3 className="text-lg font-semibold mb-2">Confirm Account Deletion</h3>
+              <p className="text-sm text-gray-600 mb-4">This action is irreversible and will remove local data for this demo.</p>
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setConfirmDeleteOpen(false)} className="px-4 py-2 border rounded-lg">Cancel</button>
+                <button onClick={() => {
+                  try {
+                    localStorage.removeItem('wb_contacts');
+                    localStorage.removeItem('wb_logs');
+                    localStorage.removeItem('wb_templates');
+                    localStorage.removeItem('wb_campaigns');
+                    localStorage.removeItem('wb_sec_2fa');
+                    localStorage.removeItem('wb_sec_ips');
+                    localStorage.removeItem('wb_sec_devices');
+                    localStorage.removeItem('wb_sec_deactivated');
+                  } catch (_) {}
+                  showToast('Account deleted (demo)', 'success');
+                  setConfirmDeleteOpen(false);
+                  logout();
+                  navigate('/');
+                }} className="px-4 py-2 bg-red-600 text-white rounded-lg">Delete</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

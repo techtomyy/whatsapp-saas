@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import {
   Search,
@@ -11,8 +11,10 @@ import {
   Send,
   X,
 } from "lucide-react";
+import { useToast } from "../context/ToastContext";
 
 export default function Composer() {
+  const { showToast } = useToast();
   const [selectedRecipients, setSelectedRecipients] = useState([
     "Sarah Jhonson",
     "David Wilson",
@@ -26,6 +28,36 @@ export default function Composer() {
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
+
+  // attachments/content by type
+  const [imageFile, setImageFile] = useState(null);
+  const [videoFile, setVideoFile] = useState(null);
+  const [docFile, setDocFile] = useState(null);
+  const [linkUrl, setLinkUrl] = useState("");
+  const imageInputRef = useRef(null);
+  const videoInputRef = useRef(null);
+  const docInputRef = useRef(null);
+
+  // load contacts for suggestions
+  const [allContacts, setAllContacts] = useState([]);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('wb_contacts');
+      const parsed = stored ? JSON.parse(stored) : [];
+      setAllContacts(parsed.map(c => c.name));
+    } catch (_) {
+      setAllContacts([]);
+    }
+  }, []);
+
+  const recipientSuggestions = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return allContacts
+      .filter(name => name.toLowerCase().includes(q))
+      .filter(name => !selectedRecipients.includes(name))
+      .slice(0, 6);
+  }, [allContacts, searchQuery, selectedRecipients]);
 
   const previewMessage =
     "Hello! Just checking in to see if you have any questions about our new product line. Let me know if you'd like more information.";
@@ -42,20 +74,102 @@ export default function Composer() {
     { id: "link", icon: Link, label: "Link" },
   ];
 
+  const validateBeforeSend = () => {
+    if (selectedRecipients.length === 0) {
+      showToast('Please add at least one recipient', 'warning');
+      return false;
+    }
+    if (activeTab === 'text') {
+      if (!messageText.trim()) {
+        showToast('Please enter a message', 'warning');
+        return false;
+      }
+    } else if (activeTab === 'image' && !imageFile) {
+      showToast('Please select an image', 'warning');
+      return false;
+    } else if (activeTab === 'video' && !videoFile) {
+      showToast('Please select a video', 'warning');
+      return false;
+    } else if (activeTab === 'file' && !docFile) {
+      showToast('Please select a file', 'warning');
+      return false;
+    } else if (activeTab === 'link') {
+      if (!linkUrl.trim()) {
+        showToast('Please enter a link URL', 'warning');
+        return false;
+      }
+      try {
+        const u = new URL(linkUrl.startsWith('http') ? linkUrl : `https://${linkUrl}`);
+        if (!u.hostname) throw new Error('bad');
+      } catch (_) {
+        showToast('Please enter a valid URL', 'warning');
+        return false;
+      }
+    }
+    if (scheduleForLater && (!scheduleDate || !scheduleTime)) {
+      showToast('Please choose schedule date and time', 'warning');
+      return false;
+    }
+    return true;
+  };
+
+  const persistLog = (payload) => {
+    try {
+      const stored = localStorage.getItem('wb_logs');
+      const logs = stored ? JSON.parse(stored) : [];
+      logs.unshift({ id: Date.now(), ...payload });
+      localStorage.setItem('wb_logs', JSON.stringify(logs));
+    } catch (_) {}
+  };
+
+  const maybeSaveTemplate = () => {
+    if (!saveAsTemplate) return;
+    try {
+      const stored = localStorage.getItem('wb_templates');
+      const templates = stored ? JSON.parse(stored) : [];
+      const name = (messageText || linkUrl || (imageFile?.name || videoFile?.name || docFile?.name) || 'Template')
+        .toString()
+        .slice(0, 40);
+      templates.unshift({ id: Date.now(), name, type: activeTab, content: {
+        text: messageText,
+        link: linkUrl,
+        file: imageFile?.name || videoFile?.name || docFile?.name || null,
+      }});
+      localStorage.setItem('wb_templates', JSON.stringify(templates));
+      showToast('Saved as template', 'success');
+    } catch (_) {}
+  };
+
   const handleSendMessage = () => {
-    console.log("Sending message:", {
+    if (!validateBeforeSend()) return;
+
+    const payload = {
       recipients: selectedRecipients,
-      message: messageText || previewMessage,
+      type: activeTab,
+      message: messageText || (activeTab === 'link' ? linkUrl : ''),
+      attachmentName: imageFile?.name || videoFile?.name || docFile?.name || null,
       scheduled: scheduleForLater,
       date: scheduleDate,
       time: scheduleTime,
-    });
-    alert("Message sent successfully!");
+      createdAt: new Date().toISOString(),
+    };
+    persistLog(payload);
+    maybeSaveTemplate();
+    showToast(scheduleForLater ? 'Message scheduled' : 'Message sent', 'success');
+
+    // reset light
+    if (!scheduleForLater) {
+      setMessageText("");
+      setImageFile(null);
+      setVideoFile(null);
+      setDocFile(null);
+      setLinkUrl("");
+    }
   };
 
   return (
     <DashboardLayout>
-      <div className="w-full bg-white px-4 sm:px-6 lg:px-8 xl:px-12 2xl:px-16">
+      <div className="w-full bg-white px-3 sm:px-6 lg:px-8 xl:px-12 2xl:px-16">
         {/* Header */}
         <div className="bg-white py-4 lg:py-6">
           <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
@@ -70,7 +184,7 @@ export default function Composer() {
           {/* Main Content */}
           <div className="flex-1 space-y-6">
             {/* Recipients */}
-            <div className="rounded-lg shadow-md p-4 sm:p-6 lg:p-8">
+            <div className="rounded-lg shadow-md p-3 sm:p-6 lg:p-8">
               <label className="block text-sm lg:text-base font-medium text-gray-700 mb-3">
                 Select Recipients
               </label>
@@ -105,6 +219,24 @@ export default function Composer() {
                 ))}
               </div>
 
+              {/* Suggestions */}
+              {recipientSuggestions.length > 0 && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 mb-3">
+                  <div className="text-xs text-gray-500 mb-1">Suggestions</div>
+                  <div className="flex flex-wrap gap-2">
+                    {recipientSuggestions.map((name) => (
+                      <button
+                        key={name}
+                        onClick={() => setSelectedRecipients((prev) => [...prev, name])}
+                        className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-100"
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Recipients Count */}
               <div className="flex items-center gap-2 text-gray-600 text-sm lg:text-base">
                 <Users className="w-4 h-4 lg:w-5 lg:h-5" />
@@ -113,7 +245,7 @@ export default function Composer() {
             </div>
 
             {/* Message Type Tabs */}
-            <div className="rounded-lg shadow-md p-4 sm:p-6 lg:p-8">
+            <div className="rounded-lg shadow-md p-3 sm:p-6 lg:p-8">
               <div className="mb-6 border-b border-gray-200 flex flex-wrap">
                 {tabs.map((tab) => {
                   const Icon = tab.icon;
@@ -141,6 +273,54 @@ export default function Composer() {
                 onChange={(e) => setMessageText(e.target.value)}
                 className="w-full h-32 lg:h-40 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none resize-none text-sm lg:text-base"
               />
+              {/* Non-text content inputs */}
+              {activeTab === 'image' && (
+                <div className="mt-3">
+                  <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setImageFile(e.target.files?.[0] || null)} />
+                  <button onClick={() => imageInputRef.current?.click()} className="px-3 py-2 border rounded-lg text-sm">{imageFile ? 'Change Image' : 'Choose Image'}</button>
+                  {imageFile && (
+                    <span className="ml-3 text-sm text-gray-700 inline-flex items-center gap-2">
+                      {imageFile.name}
+                      <button onClick={() => setImageFile(null)} className="text-gray-500 hover:text-gray-700"><X className="w-4 h-4" /></button>
+                    </span>
+                  )}
+                </div>
+              )}
+              {activeTab === 'video' && (
+                <div className="mt-3">
+                  <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={(e) => setVideoFile(e.target.files?.[0] || null)} />
+                  <button onClick={() => videoInputRef.current?.click()} className="px-3 py-2 border rounded-lg text-sm">{videoFile ? 'Change Video' : 'Choose Video'}</button>
+                  {videoFile && (
+                    <span className="ml-3 text-sm text-gray-700 inline-flex items-center gap-2">
+                      {videoFile.name}
+                      <button onClick={() => setVideoFile(null)} className="text-gray-500 hover:text-gray-700"><X className="w-4 h-4" /></button>
+                    </span>
+                  )}
+                </div>
+              )}
+              {activeTab === 'file' && (
+                <div className="mt-3">
+                  <input ref={docInputRef} type="file" className="hidden" onChange={(e) => setDocFile(e.target.files?.[0] || null)} />
+                  <button onClick={() => docInputRef.current?.click()} className="px-3 py-2 border rounded-lg text-sm">{docFile ? 'Change File' : 'Choose File'}</button>
+                  {docFile && (
+                    <span className="ml-3 text-sm text-gray-700 inline-flex items-center gap-2">
+                      {docFile.name}
+                      <button onClick={() => setDocFile(null)} className="text-gray-500 hover:text-gray-700"><X className="w-4 h-4" /></button>
+                    </span>
+                  )}
+                </div>
+              )}
+              {activeTab === 'link' && (
+                <div className="mt-3">
+                  <input
+                    type="url"
+                    placeholder="https://example.com"
+                    value={linkUrl}
+                    onChange={(e) => setLinkUrl(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+              )}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mt-2 text-sm lg:text-base text-gray-500 gap-2">
                 <label className="flex items-center gap-2">
                   <input
@@ -156,7 +336,7 @@ export default function Composer() {
             </div>
 
             {/* Schedule Section */}
-            <div className="rounded-lg shadow-md p-4 sm:p-6 lg:p-8">
+            <div className="rounded-lg shadow-md p-3 sm:p-6 lg:p-8">
               <label className="flex items-center gap-2 text-sm lg:text-base font-medium text-gray-700 mb-3">
                 <input
                   type="checkbox"
@@ -210,7 +390,7 @@ export default function Composer() {
           </div>
 
           {/* Preview Sidebar */}
-          <div className="w-full lg:w-96 xl:w-[30rem] p-4 sm:p-6 lg:p-8 bg-white rounded-lg shadow-md">
+          <div className="w-full lg:w-96 xl:w-[30rem] p-3 sm:p-6 lg:p-8 bg-white rounded-lg shadow-md">
             <h3 className="text-lg lg:text-xl font-medium text-gray-900 mb-4">
               Preview
             </h3>

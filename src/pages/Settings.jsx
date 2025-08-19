@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import DashboardLayout from "../components/DashboardLayout";
 import { Eye, EyeOff, ChevronDown, Camera, X } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 const SettingsDashboard = () => {
   const { user, updateProfile } = useAuth();
+  const { showToast } = useToast();
   // Profile Information
   const [firstName, setFirstName] = useState(user.name.split(' ')[0]);
   const [lastName, setLastName] = useState(user.name.split(' ')[1] || '');
@@ -16,7 +18,14 @@ const SettingsDashboard = () => {
   const [language, setLanguage] = useState('English (US)');
   const [timezone, setTimezone] = useState('Eastern Time (US & Canada)');
   const [dateFormat, setDateFormat] = useState('MM/DD/YYYY');
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('wb_dark_mode') || 'false'); } catch (_) { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('wb_dark_mode', JSON.stringify(darkMode)); } catch (_) {}
+    const root = document.documentElement;
+    if (darkMode) root.classList.add('dark'); else root.classList.remove('dark');
+  }, [darkMode]);
 
   // Notification Preferences
   const [emailNotifications, setEmailNotifications] = useState(true);
@@ -31,7 +40,7 @@ const SettingsDashboard = () => {
 
   // API Access
   const [apiAccess, setApiAccess] = useState(true);
-  const [apiKey] = useState('sk_test_1234567890abcdef');
+  const [apiKey, setApiKey] = useState('sk_test_1234567890abcdef');
   const [showApiKey, setShowApiKey] = useState(false);
 
   // Webhooks
@@ -85,6 +94,9 @@ const SettingsDashboard = () => {
       const reader = new FileReader();
       reader.onload = (e) => {
         setProfilePhoto(e.target.result);
+        updateProfile({ photoUrl: e.target.result });
+        try { localStorage.setItem('wb_profile_photo', e.target.result); } catch (_) {}
+        showToast('Profile photo updated', 'success');
       };
       reader.readAsDataURL(file);
     }
@@ -92,26 +104,28 @@ const SettingsDashboard = () => {
 
   const handleRemovePhoto = () => {
     setProfilePhoto(null);
+    try { localStorage.removeItem('wb_profile_photo'); } catch (_) {}
+    showToast('Profile photo removed', 'success');
   };
 
   const handleConnectIntegration = (integrationName) => {
     if (connectedIntegrations.includes(integrationName)) {
       setConnectedIntegrations(connectedIntegrations.filter(name => name !== integrationName));
-      alert(`Disconnected from ${integrationName}`);
+      showToast(`Disconnected from ${integrationName}`, 'success');
     } else {
       setConnectedIntegrations([...connectedIntegrations, integrationName]);
-      alert(`Connected to ${integrationName} successfully!`);
+      showToast(`Connected to ${integrationName}`, 'success');
     }
   };
 
   const regenerateApiKey = () => {
-    if (window.confirm('Are you sure you want to regenerate your API key? This will invalidate the current key.')) {
-      alert('API key regenerated successfully!');
-    }
+    const newKey = 'sk_' + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 10);
+    setApiKey(newKey);
+    showToast('API key regenerated (demo)', 'success');
   };
 
   const saveWebhookSettings = () => {
-    alert('Webhook settings saved successfully!');
+    showToast('Webhook settings saved', 'success');
   };
 
   const handleSubmit = async (e) => {
@@ -123,9 +137,9 @@ const SettingsDashboard = () => {
         email,
         // Add other fields as necessary
       });
-      // Show success toast
+      showToast('Profile updated', 'success');
     } catch (error) {
-      // Show error toast
+      showToast('Failed to update profile', 'error');
     } finally {
       setSaving(false);
     }
@@ -163,7 +177,7 @@ const SettingsDashboard = () => {
 
   return (
     <DashboardLayout>
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Settings</h1>
@@ -246,7 +260,7 @@ const SettingsDashboard = () => {
                 </label>
                 {profilePhoto && (
                   <button
-                    onClick={handleRemovePhoto}
+                    onClick={() => { handleRemovePhoto(); updateProfile({ photoUrl: null }); }}
                     className="px-4 py-2 text-red-600 hover:text-red-800 transition-colors"
                   >
                     Remove

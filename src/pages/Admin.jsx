@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import DashboardLayout from "../components/DashboardLayout";
 import { Search, Plus, RefreshCcw, MoreHorizontal } from "lucide-react";
+import { useToast } from "../context/ToastContext";
 import { userService } from '../services/userService';
 
 // Pagination settings
@@ -9,6 +10,7 @@ const PAGE_SIZE = 5;
 
 const AdminPanel = () => {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [users, setUsers] = useState([
     {
       id: 1,
@@ -89,24 +91,32 @@ const AdminPanel = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [actionLoading, setActionLoading] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", role: "Agent" });
 
   const handleAction = (id, action) => {
     if (action === "Delete") {
       setUsers(users.filter((u) => u.id !== id));
+      showToast('User deleted', 'success');
     } else if (action === "Disable") {
       setUsers(
         users.map((u) =>
           u.id === id ? { ...u, status: "Disabled" } : u
         )
       );
+      showToast('User disabled', 'success');
     } else if (action === "Suspend") {
       setUsers(
         users.map((u) =>
           u.id === id ? { ...u, status: "Suspended" } : u
         )
       );
-    } else {
-      alert(`${action} action clicked for user ID: ${id}`);
+      showToast('User suspended', 'success');
+    } else if (action === "View") {
+      const target = users.find(u => u.id === id);
+      if (target) showToast(`${target.name} • ${target.email}`, 'success');
+    } else if (action === "Edit") {
+      showToast('Open edit user modal (demo)', 'success');
     }
     setDropdownOpen(null);
   };
@@ -142,8 +152,9 @@ const AdminPanel = () => {
       );
       // Refresh user list
       setSelectedUsers([]);
+      showToast(`Bulk ${action} completed`, 'success');
     } catch (error) {
-      // Show error toast
+      showToast('Bulk action failed', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -160,6 +171,36 @@ const AdminPanel = () => {
 
     fetchData();
   }, []);
+
+  const openAddModal = () => {
+    setForm({ name: "", email: "", role: "Agent" });
+    setAddOpen(true);
+  };
+
+  const saveNewUser = (e) => {
+    e.preventDefault();
+    const name = form.name.trim();
+    const email = form.email.trim();
+    if (!name || !email) {
+      showToast('Name and email are required', 'warning');
+      return;
+    }
+    if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+      showToast('Email already exists', 'warning');
+      return;
+    }
+    const newUser = {
+      id: Date.now(),
+      name,
+      email,
+      role: form.role,
+      status: 'Active',
+      lastLogin: '-',
+    };
+    setUsers([newUser, ...users]);
+    setAddOpen(false);
+    showToast('User added', 'success');
+  };
 
   return (
     <DashboardLayout>
@@ -179,10 +220,10 @@ const AdminPanel = () => {
             />
           </div>
           <div className="flex gap-2">
-            <button className="flex items-center gap-2 bg-green-500 text-white px-3 py-2 rounded-lg shadow hover:bg-green-600">
+            <button onClick={openAddModal} className="flex items-center gap-2 bg-green-500 text-white px-3 py-2 rounded-lg shadow hover:bg-green-600">
               <Plus size={16} /> Add User
             </button>
-            <button className="flex items-center gap-2 border px-3 py-2 rounded-lg shadow hover:bg-gray-100">
+            <button onClick={() => { setIsLoading(true); setTimeout(() => { setIsLoading(false); showToast('Refreshed', 'success'); }, 500); }} className="flex items-center gap-2 border px-3 py-2 rounded-lg shadow hover:bg-gray-100">
               <RefreshCcw size={16} /> Refresh
             </button>
           </div>
@@ -210,37 +251,17 @@ const AdminPanel = () => {
           </div>
         </div>
 
-        {/* Bulk Actions */}
-        <div className="mb-4 flex gap-2">
-          <button 
-            onClick={() => handleBulkAction('activate')}
-            disabled={selectedUsers.length === 0 || actionLoading}
-            className="px-4 py-2 bg-green-500 text-white rounded"
-          >
-            Activate Selected
-          </button>
-          <button 
-            onClick={() => handleBulkAction('deactivate')}
-            disabled={selectedUsers.length === 0 || actionLoading}
-            className="px-4 py-2 bg-yellow-500 text-white rounded"
-          >
-            Deactivate Selected
-          </button>
-          <button 
-            onClick={() => handleBulkAction('delete')}
-            disabled={selectedUsers.length === 0 || actionLoading}
-            className="px-4 py-2 bg-red-500 text-white rounded"
-          >
-            Delete Selected
-          </button>
-        </div>
+     
 
         {/* Table */}
         <div className="bg-white rounded-xl shadow overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-100 text-left text-gray-600 text-sm">
               <tr>
-                
+                <th className="p-3"><input type="checkbox" aria-label="select all" onChange={(e) => {
+                  if (e.target.checked) setSelectedUsers(paginatedUsers.map(u => u.id));
+                  else setSelectedUsers([]);
+                }} checked={selectedUsers.length === paginatedUsers.length && paginatedUsers.length > 0} /></th>
                 <th className="p-3">Name</th>
                 <th className="p-3">Email</th>
                 <th className="p-3">Role</th>
@@ -252,7 +273,10 @@ const AdminPanel = () => {
             <tbody className="text-gray-700 divide-y divide-gray-100">
               {paginatedUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-gray-50">
-                  
+                  <td className="p-3"><input type="checkbox" checked={selectedUsers.includes(user.id)} onChange={(e) => {
+                    if (e.target.checked) setSelectedUsers([...selectedUsers, user.id]);
+                    else setSelectedUsers(selectedUsers.filter(id => id !== user.id));
+                  }} /></td>
                   <td className="p-3 whitespace-nowrap">{user.name}</td>
                   <td className="p-3 whitespace-nowrap">{user.email}</td>
                   <td className="p-3">

@@ -10,7 +10,7 @@ export default function DashboardLayout({ children }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 flex overflow-hidden md:pl-64">
       {/* Sidebar */}
       <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
 
@@ -20,7 +20,7 @@ export default function DashboardLayout({ children }) {
         <TopBar toggleSidebar={toggleSidebar} />
 
         {/* Page Content */}
-        <main className="flex-1">
+        <main className="flex-1 overflow-y-auto">
           {children}
         </main>
       </div>

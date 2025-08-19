@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Bell, Settings, LogOut, User, ChevronDown } from "lucide-react";
+import { Bell, Settings, LogOut, User, ChevronDown, Menu } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 export default function TopBar({ toggleSidebar }) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const notifRef = useRef();
@@ -49,10 +51,18 @@ export default function TopBar({ toggleSidebar }) {
   }, []);
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
+    <header className="bg-white shadow-sm border-b border-gray-200 px-3 sm:px-4 md:px-6 py-3 md:py-4">
       <div className="flex items-center justify-between">
         {/* Left side */}
-        <div>{/* ...existing code... */}</div>
+        <div className="flex items-center">
+          <button
+            onClick={toggleSidebar}
+            className="md:hidden p-2 rounded-md text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300"
+            aria-label="Open sidebar"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+        </div>
 
         {/* Right side */}
         <div className="flex items-center space-x-4">
@@ -67,7 +77,7 @@ export default function TopBar({ toggleSidebar }) {
             </button>
 
             {notifOpen && (
-              <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-100 py-2 z-50">
+              <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-lg shadow-lg border border-gray-100 py-2 z-50">
                 <div className="px-4 py-2 border-b border-gray-100">
                   <h3 className="font-semibold text-gray-900">Notifications</h3>
                 </div>
@@ -88,7 +98,7 @@ export default function TopBar({ toggleSidebar }) {
                 </div>
 
                 <div className="px-4 py-2 border-t border-gray-100">
-                  <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                  <button onClick={() => { setNotifOpen(false); navigate('/logs'); }} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
                     View all notifications
                   </button>
                 </div>
@@ -100,13 +110,17 @@ export default function TopBar({ toggleSidebar }) {
           <div className="relative" ref={userRef}>
             <button
               onClick={() => setUserOpen(!userOpen)}
-              className="flex items-center space-x-3 hover:bg-gray-100 rounded-lg px-3 py-2 transition-colors"
+              className="flex items-center space-x-2 sm:space-x-3 hover:bg-gray-100 rounded-lg px-2 sm:px-3 py-2 transition-colors"
             >
-              <div className="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center">
-                <span className="text-white font-medium">
-                  {user?.name?.[0] || "U"}
-                </span>
-              </div>
+              {user?.photoUrl ? (
+                <img src={user.photoUrl} alt="avatar" className="w-8 h-8 rounded-full object-cover" />
+              ) : (
+                <div className="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center">
+                  <span className="text-white font-medium">
+                    {user?.name?.[0] || "U"}
+                  </span>
+                </div>
+              )}
               <div className="hidden md:block text-left">
                 <p className="text-sm font-medium text-gray-900">{user?.name}</p>
                 <p className="text-xs text-gray-500">{user?.email}</p>
