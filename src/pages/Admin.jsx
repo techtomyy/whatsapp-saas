@@ -386,6 +386,35 @@ const AdminPanel = () => {
             </div>
           </div>
         </div>
+        {addOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="bg-white w-full max-w-lg rounded-lg shadow-lg p-6">
+              <h3 className="text-lg font-semibold mb-4">Add User</h3>
+              <form onSubmit={saveNewUser} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                  <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                    <option>Agent</option>
+                    <option>Manager</option>
+                    <option>Admin</option>
+                  </select>
+                </div>
+                <div className="flex justify-end gap-3 pt-2">
+                  <button type="button" onClick={() => setAddOpen(false)} className="px-4 py-2 border rounded-lg">Cancel</button>
+                  <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg">Save</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

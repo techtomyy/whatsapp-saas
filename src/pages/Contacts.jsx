@@ -154,10 +154,8 @@ export default function Contacts() {
   };
 
   const deleteContact = (id) => {
-    if (window.confirm('Delete this contact?')) {
-      setContacts(contacts.filter((c) => c.id !== id));
-      showToast('Contact deleted', 'success');
-    }
+    setContacts(contacts.filter((c) => c.id !== id));
+    showToast('Contact deleted', 'success');
   };
 
   const handleExport = () => {

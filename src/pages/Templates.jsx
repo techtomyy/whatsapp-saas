@@ -222,7 +222,22 @@ const MessageTemplates = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Content / Preview</label>
-                  <input value={form.preview} onChange={(e) => setForm({ ...form, preview: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="e.g. Welcome to our service... or https://example.com" />
+                  {form.type === 'Text' ? (
+                    <textarea
+                      value={form.preview}
+                      onChange={(e) => setForm({ ...form, preview: e.target.value })}
+                      rows={8}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg h-40 resize-y"
+                      placeholder="Type your message..."
+                    />
+                  ) : (
+                    <input
+                      value={form.preview}
+                      onChange={(e) => setForm({ ...form, preview: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      placeholder="e.g. https://example.com or short caption"
+                    />
+                  )}
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-2">
