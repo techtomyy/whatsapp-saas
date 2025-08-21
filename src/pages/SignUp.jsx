@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import signup from "../assets/signup.png";
+import signupImage from "../assets/signup.png";
 
 import {
   CheckCircle,
@@ -11,7 +11,9 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 
 export default function SignUpPage() {
   const [formData, setFormData] = useState({
@@ -23,6 +25,10 @@ export default function SignUpPage() {
   });
 
   const [showPassword, setShowPassword] = useState(false);
+  const { signup, loginWithGoogle } = useAuth();
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+  const [error, setError] = useState("");
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -32,16 +38,37 @@ export default function SignUpPage() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("Form submitted:", formData);
+    setError("");
+    try {
+      await signup(formData.email.trim(), formData.password, formData.username.trim());
+      showToast('Account created. Please log in.', 'success');
+      navigate('/login');
+    } catch (err) {
+      const code = err?.code;
+      let message = err?.message || 'Sign up failed';
+      switch (code) {
+        case 'auth/invalid-email':
+          message = 'Invalid email format'; break;
+        case 'auth/email-already-in-use':
+          message = 'Email already in use'; break;
+        case 'auth/weak-password':
+          message = 'Password should be at least 6 characters'; break;
+        case 'auth/operation-not-allowed':
+          message = 'Email/Password sign-in is disabled in Firebase Auth'; break;
+        case 'auth/network-request-failed':
+          message = 'Network error. Check your connection'; break;
+      }
+      setError(message);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
       <div className="w-full lg:w-1/2 bg-gradient-to-br flex items-center justify-end p-8">
         <img
-          src={signup}
+          src={signupImage}
           alt="Sign up illustration"
           className="w-full max-w-[500px] h-auto"
         />
@@ -179,6 +206,24 @@ export default function SignUpPage() {
                 Sign Up
               </button>
             </form>
+
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={async () => {
+                  setError("");
+                  try {
+                    await loginWithGoogle();
+                    navigate('/dashboard');
+                  } catch (err) {
+                    setError(err?.message || 'Google sign-in failed');
+                  }
+                }}
+                className="w-full border border-gray-300 text-gray-700 font-semibold py-3 rounded-lg hover:bg-gray-50 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
+              >
+                Continue with Google
+              </button>
+            </div>
 
             <div className="mt-5 text-center">
               <p className="text-sm text-gray-600">

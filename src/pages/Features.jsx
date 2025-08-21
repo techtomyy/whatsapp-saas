@@ -9,7 +9,7 @@ import {
   Shield,
   CheckCircle,
 } from "lucide-react";
-import feature from "../assets/feature.png";
+import featureImg from "../assets/feature.png";
 
 const Features = () => {
   const features = [
@@ -98,25 +98,25 @@ const Features = () => {
             </div>
 
             <div className="space-y-8">
-              {features.map((feature) => (
+              {features.map((item) => (
                 <div key={feature.id} className="group">
                   <div className="flex items-start space-x-4">
                     <div
-                      className={`w-8 h-8 ${feature.color} rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-sm`}
+                      className={`w-8 h-8 ${item.color} rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-sm`}
                     >
-                      {feature.id}
+                      {item.id}
                     </div>
 
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-3">
-                        <div className="text-gray-700">{feature.icon}</div>
+                        <div className="text-gray-700">{item.icon}</div>
                         <h3 className="text-xl font-bold text-gray-900">
-                          {feature.title}
+                          {item.title}
                         </h3>
                       </div>
 
                       <div className="space-y-2 text-gray-600">
-                        {feature.details.map((detail, index) => (
+                        {item.details.map((detail, index) => (
                           <div
                             key={index}
                             className="flex items-center space-x-2"
@@ -136,7 +136,7 @@ const Features = () => {
           <div className="relative">
             <div className="  flex flex-col mt-0  items-center">
               <img
-                src={feature}
+                src={featureImg}
                 alt="App Preview"
                 className="h-90 w-270  hover:scale-105 transition-transform duration-300"
               />

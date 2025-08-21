@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import AddPeopleToGroup from "../components/AddPeopleToGroup";
 import { useToast } from "../context/ToastContext";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebase/client";
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 
 import {
   Search,
@@ -18,6 +21,7 @@ import {
 
 export default function Contacts() {
   const { showToast } = useToast();
+  const { user } = useAuth();
 
   
   
@@ -28,61 +32,28 @@ export default function Contacts() {
   const [groupName, setGroupName] = useState("");
   const [phoneNumbers, setPhoneNumbers] = useState(["", "", "", ""]);
 
-  const defaultContacts = [
-    {
-      id: 1,
-      name: "Sarah Johnson",
-      phone: "+1 (555) 123-4567",
-      type: "Individual",
-      tags: ["Customer", "VIP"],
-      created: "May 12, 2025",
-    },
-    {
-      id: 2,
-      name: "Michael Brown",
-      phone: "+1 (555) 321-7654",
-      type: "Individual",
-      tags: ["Lead"],
-      created: "April 14, 2025",
-    },
-    {
-      id: 3,
-      name: "Marketing Team",
-      phone: "+1 (555) 234-5678",
-      type: "Group",
-      tags: ["Internal"],
-      created: "June 20, 2025",
-    },
-    {
-      id: 4,
-      name: "David Wilson",
-      phone: "+1 (555) 246-1357",
-      type: "Individual",
-      tags: ["Customer"],
-      created: "July 5, 2025",
-    },
-    {
-      id: 5,
-      name: "Amanda Rodriguez",
-      phone: "+1 (555) 122-4545",
-      type: "Individual",
-      tags: ["Lead"],
-      created: "June 10, 2024",
-    },
-  ];
+  const [contacts, setContacts] = useState([]);
 
-  const [contacts, setContacts] = useState(() => {
-    try {
-      const stored = localStorage.getItem('wb_contacts');
-      return stored ? JSON.parse(stored) : defaultContacts;
-    } catch (_) {
-      return defaultContacts;
-    }
-  });
-
+  // Firestore: subscribe to user's contacts
   useEffect(() => {
-    try { localStorage.setItem('wb_contacts', JSON.stringify(contacts)); } catch (_) {}
-  }, [contacts]);
+    if (!user?.uid) return;
+    const colRef = collection(db, 'users', user.uid, 'contacts');
+    const unsub = onSnapshot(colRef, (snap) => {
+      const rows = snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: data.name || '',
+          phone: data.phone || '',
+          type: data.type || 'Individual',
+          tags: Array.isArray(data.tags) ? data.tags : [],
+          created: data.created?.toDate ? data.created.toDate().toLocaleDateString() : (data.created || ''),
+        };
+      });
+      setContacts(rows);
+    });
+    return () => unsub();
+  }, [user?.uid]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("All Types");
@@ -130,31 +101,36 @@ export default function Contacts() {
     setModalOpen(true);
   };
 
-  const saveContact = (e) => {
+  const saveContact = async (e) => {
     e.preventDefault();
     const tags = form.tags
       .split(',')
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
+    if (!user?.uid) return;
     if (editing) {
-      setContacts(contacts.map((c) => (c.id === editing.id ? { ...c, name: form.name, phone: form.phone, type: form.type, tags } : c)));
-    } else {
-      const newContact = {
-        id: Date.now(),
+      await updateDoc(doc(db, 'users', user.uid, 'contacts', String(editing.id)), {
         name: form.name,
         phone: form.phone,
         type: form.type,
         tags,
-        created: new Date().toLocaleDateString(),
-      };
-      setContacts([newContact, ...contacts]);
+      });
+    } else {
+      await addDoc(collection(db, 'users', user.uid, 'contacts'), {
+        name: form.name,
+        phone: form.phone,
+        type: form.type,
+        tags,
+        created: serverTimestamp(),
+      });
     }
     setModalOpen(false);
     setEditing(null);
   };
 
-  const deleteContact = (id) => {
-    setContacts(contacts.filter((c) => c.id !== id));
+  const deleteContact = async (id) => {
+    if (!user?.uid) return;
+    await deleteDoc(doc(db, 'users', user.uid, 'contacts', String(id)));
     showToast('Contact deleted', 'success');
   };
 
@@ -190,22 +166,21 @@ export default function Contacts() {
     const typeIdx = header.indexOf('type');
     const tagsIdx = header.indexOf('tags');
     const createdIdx = header.indexOf('created');
-    const imported = [];
+    const importedData = [];
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(',');
       if (!cols[nameIdx]) continue;
-      imported.push({
-        id: Date.now() + i,
+      importedData.push({
         name: cols[nameIdx]?.replace(/^\"|\"$/g, '') || '',
         phone: cols[phoneIdx]?.replace(/^\"|\"$/g, '') || '',
         type: cols[typeIdx]?.replace(/^\"|\"$/g, '') || 'Individual',
         tags: (cols[tagsIdx]?.replace(/^\"|\"$/g, '') || '').split('|').filter(Boolean),
-        created: cols[createdIdx]?.replace(/^\"|\"$/g, '') || new Date().toLocaleDateString(),
       });
     }
-    if (imported.length) {
-      setContacts([...imported, ...contacts]);
-      showToast(`Imported ${imported.length} contact(s)`, 'success');
+    if (!user?.uid) return;
+    if (importedData.length) {
+      await Promise.all(importedData.map(row => addDoc(collection(db, 'users', user.uid, 'contacts'), { ...row, created: serverTimestamp() })));
+      showToast(`Imported ${importedData.length} contact(s)`, 'success');
     } else {
       showToast('No contacts found in file', 'warning');
     }

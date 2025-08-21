@@ -1,18 +1,18 @@
 import React, { useState } from "react";
-import { User, Lock, Eye, EyeOff } from "lucide-react";
+import { User, Lock, Eye, EyeOff, Mail } from "lucide-react";
 import loginImage from "../assets/signup.png";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({
-    username: "demo",
-    password: "demo123",
+    email: "",
+    password: "",
   });
 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   const handleInputChange = (e) => {
@@ -24,10 +24,36 @@ export default function LoginPage() {
     setError("");
 
     try {
-      await login(formData.username, formData.password);
+      await login(formData.email.trim(), formData.password);
+      setFormData({ email: "", password: "" });
       navigate("/dashboard");
     } catch (err) {
-      setError("Invalid credentials");
+      const code = err?.code;
+      let message = err?.message || "Login failed";
+      switch (code) {
+        case "auth/invalid-email":
+          message = "Invalid email format";
+          break;
+        case "auth/operation-not-allowed":
+          message = "Email/Password sign-in is disabled in Firebase Auth";
+          break;
+        case "auth/user-disabled":
+          message = "This account has been disabled";
+          break;
+        case "auth/user-not-found":
+          message = "No account found with this email";
+          break;
+        case "auth/wrong-password":
+          message = "Incorrect password";
+          break;
+        case "auth/too-many-requests":
+          message = "Too many attempts. Please try again later";
+          break;
+        case "auth/network-request-failed":
+          message = "Network error. Check your connection";
+          break;
+      }
+      setError(message);
     }
   };
 
@@ -56,17 +82,19 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Username
+                  Email
                 </label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                   <input
-                    type="text"
-                    name="username"
-                    value={formData.username}
+                    type="email"
+                    name="email"
+                    value={formData.email}
                     onChange={handleInputChange}
                     className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-colors"
-                    placeholder="Enter your username (try demo)"
+                    placeholder="Enter the email you used to sign up"
+                    autoComplete="email"
+                    required
                   />
                 </div>
               </div>
@@ -83,7 +111,9 @@ export default function LoginPage() {
                     value={formData.password}
                     onChange={handleInputChange}
                     className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-colors"
-                    placeholder="Enter your password (try demo123)"
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                    required
                   />
                   <button
                     type="button"
@@ -106,6 +136,25 @@ export default function LoginPage() {
                 Sign In
               </button>
             </form>
+
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={async () => {
+                  setError("");
+                  try {
+                    await loginWithGoogle();
+                    setFormData({ email: "", password: "" });
+                    navigate("/dashboard");
+                  } catch (err) {
+                    setError(err?.message || "Google sign-in failed");
+                  }
+                }}
+                className="w-full border border-gray-300 text-gray-700 font-semibold py-3 rounded-lg hover:bg-gray-50 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
+              >
+                Continue with Google
+              </button>
+            </div>
 
             <div className="mt-5 text-center">
               <p className="text-sm text-gray-600">

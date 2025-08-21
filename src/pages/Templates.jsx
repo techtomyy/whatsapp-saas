@@ -3,6 +3,9 @@ import DashboardLayout from "../components/DashboardLayout";
 import { Search, ChevronLeft, ChevronRight, Edit, Send, Trash } from "lucide-react";
 import { useToast } from "../context/ToastContext";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebase/client";
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 
 const MessageTemplates = () => {
   const navigate = useNavigate();
@@ -15,19 +18,19 @@ const MessageTemplates = () => {
     { id: 4, name: "Appointment Reminder", type: "Text", preview: "This is a friendly reminder about your ap ...", created: "2025-07-20", lastUsed: "2025-07-26" },
   ];
 
-  const [templates, setTemplates] = useState(() => {
-    try {
-      const stored = localStorage.getItem('wb_templates');
-      if (stored) return JSON.parse(stored);
-      return sampleTemplates;
-    } catch (_) {
-      return sampleTemplates;
-    }
-  });
+  const { user } = useAuth();
+  const [templates, setTemplates] = useState([]);
 
+  // Firestore subscription
   useEffect(() => {
-    try { localStorage.setItem('wb_templates', JSON.stringify(templates)); } catch (_) {}
-  }, [templates]);
+    if (!user?.uid) return;
+    const colRef = collection(db, 'users', user.uid, 'templates');
+    const unsub = onSnapshot(colRef, (snap) => {
+      const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setTemplates(rows);
+    });
+    return () => unsub();
+  }, [user?.uid]);
 
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("All Types");
@@ -48,6 +51,15 @@ const MessageTemplates = () => {
   const [form, setForm] = useState({ name: "", type: "Text", preview: "" });
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
+  const formatDateValue = (value) => {
+    if (!value) return '-';
+    try {
+      if (value.toDate) return value.toDate().toLocaleString();
+    } catch (_) {}
+    if (typeof value === 'string') return value;
+    return '-';
+  };
+
   const openCreate = () => {
     setEditing(null);
     setForm({ name: "", type: "Text", preview: "" });
@@ -60,22 +72,25 @@ const MessageTemplates = () => {
     setModalOpen(true);
   };
 
-  const saveTemplate = (e) => {
+  const saveTemplate = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) { showToast('Please enter a template name', 'warning'); return; }
+    if (!user?.uid) return;
     if (editing) {
-      setTemplates(templates.map(t => t.id === editing.id ? { ...t, name: form.name.trim(), type: form.type, preview: form.preview } : t));
-      showToast('Template updated', 'success');
-    } else {
-      const newTpl = {
-        id: Date.now(),
+      await updateDoc(doc(db, 'users', user.uid, 'templates', String(editing.id)), {
         name: form.name.trim(),
         type: form.type,
         preview: form.preview,
-        created: new Date().toISOString().slice(0,10),
-        lastUsed: "-",
-      };
-      setTemplates([newTpl, ...templates]);
+      });
+      showToast('Template updated', 'success');
+    } else {
+      await addDoc(collection(db, 'users', user.uid, 'templates'), {
+        name: form.name.trim(),
+        type: form.type,
+        preview: form.preview,
+        created: serverTimestamp(),
+        lastUsed: null,
+      });
       showToast('Template created', 'success');
     }
     setModalOpen(false);
@@ -83,17 +98,20 @@ const MessageTemplates = () => {
   };
 
   const confirmDelete = (id) => setConfirmDeleteId(id);
-  const performDelete = () => {
-    setTemplates(templates.filter(t => t.id !== confirmDeleteId));
+  const performDelete = async () => {
+    if (!user?.uid) return;
+    await deleteDoc(doc(db, 'users', user.uid, 'templates', String(confirmDeleteId)));
     setConfirmDeleteId(null);
     showToast('Template deleted', 'success');
   };
 
-  const sendFromTemplate = (tpl) => {
+  const sendFromTemplate = async (tpl) => {
     try {
       localStorage.setItem('wb_composer_prefill', JSON.stringify({ type: tpl.type, content: tpl.preview || '' }));
     } catch (_) {}
-    setTemplates(templates.map(t => t.id === tpl.id ? { ...t, lastUsed: new Date().toISOString().slice(0,10) } : t));
+    if (user?.uid) {
+      await updateDoc(doc(db, 'users', user.uid, 'templates', String(tpl.id)), { lastUsed: serverTimestamp() });
+    }
     navigate('/composer');
   };
 
@@ -156,8 +174,8 @@ const MessageTemplates = () => {
                 <td className="px-4 py-3">{t.name}</td>
                 <td className="px-4 py-3">{t.type}</td>
                 <td className="px-4 py-3">{t.preview}</td>
-                <td className="px-4 py-3">{t.created}</td>
-                <td className="px-4 py-3">{t.lastUsed}</td>
+                <td className="px-4 py-3">{formatDateValue(t.created)}</td>
+                <td className="px-4 py-3">{formatDateValue(t.lastUsed)}</td>
                 <td className="px-4 py-3 flex gap-2">
                   <Edit onClick={() => openEdit(t)} className="w-4 h-4 cursor-pointer text-gray-600 hover:text-blue-500" />
                   <Send onClick={() => sendFromTemplate(t)} className="w-4 h-4 cursor-pointer text-gray-600 hover:text-green-500" />
