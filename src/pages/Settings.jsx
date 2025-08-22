@@ -3,6 +3,9 @@ import { useAuth } from '../context/AuthContext';
 import DashboardLayout from "../components/DashboardLayout";
 import { Eye, EyeOff, ChevronDown, Camera, X } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { db, storage } from '../firebase/client';
+import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const SettingsDashboard = () => {
   const { user, updateProfile } = useAuth();
@@ -26,6 +29,43 @@ const SettingsDashboard = () => {
     const root = document.documentElement;
     if (darkMode) root.classList.add('dark'); else root.classList.remove('dark');
   }, [darkMode]);
+
+  // Load settings from Firestore in real-time
+  useEffect(() => {
+    if (!user?.uid) return;
+    const userRef = doc(db, 'users', user.uid);
+    const unsub = onSnapshot(userRef, (snap) => {
+      if (!snap.exists()) return;
+      const d = snap.data();
+      if (d.firstName !== undefined) setFirstName(d.firstName || '');
+      if (d.lastName !== undefined) setLastName(d.lastName || '');
+      if (d.email !== undefined) setEmail(d.email || user.email || '');
+      if (d.phone !== undefined) setPhone(d.phone || '');
+      if (d.photoUrl !== undefined) setProfilePhoto(d.photoUrl || null);
+      if (d.language !== undefined) setLanguage(d.language || 'English (US)');
+      if (d.timezone !== undefined) setTimezone(d.timezone || 'Eastern Time (US & Canada)');
+      if (d.dateFormat !== undefined) setDateFormat(d.dateFormat || 'MM/DD/YYYY');
+      if (d.darkMode !== undefined) setDarkMode(!!d.darkMode);
+      if (d.emailNotifications !== undefined) setEmailNotifications(!!d.emailNotifications);
+      if (d.desktopNotifications !== undefined) setDesktopNotifications(!!d.desktopNotifications);
+      if (d.mobileNotifications !== undefined) setMobileNotifications(!!d.mobileNotifications);
+      if (d.messageDelivery !== undefined) setMessageDelivery(!!d.messageDelivery);
+      if (d.repliesAlert !== undefined) setRepliesAlert(!!d.repliesAlert);
+      if (d.quotaAlerts !== undefined) setQuotaAlerts(!!d.quotaAlerts);
+      if (d.productUpdates !== undefined) setProductUpdates(!!d.productUpdates);
+      if (d.apiAccess !== undefined) setApiAccess(!!d.apiAccess);
+      if (d.apiKey !== undefined) setApiKey(d.apiKey || '');
+      if (d.webhookUrl !== undefined) setWebhookUrl(d.webhookUrl || '');
+      if (d.webhookEvents !== undefined) setWebhookEvents({
+        messageSent: !!d.webhookEvents?.messageSent,
+        messageDelivered: !!d.webhookEvents?.messageDelivered,
+        messageRead: !!d.webhookEvents?.messageRead,
+        messageFailed: !!d.webhookEvents?.messageFailed,
+        replyReceived: !!d.webhookEvents?.replyReceived,
+      });
+    });
+    return () => unsub();
+  }, [user?.uid]);
 
   // Notification Preferences
   const [emailNotifications, setEmailNotifications] = useState(true);
@@ -88,23 +128,28 @@ const SettingsDashboard = () => {
   const [connectedIntegrations, setConnectedIntegrations] = useState([]);
   const [saving, setSaving] = useState(false);
 
-  const handleFileUpload = (event) => {
+  const handleFileUpload = async (event) => {
     const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setProfilePhoto(e.target.result);
-        updateProfile({ photoUrl: e.target.result });
-        try { localStorage.setItem('wb_profile_photo', e.target.result); } catch (_) {}
-        showToast('Profile photo updated', 'success');
-      };
-      reader.readAsDataURL(file);
+    if (!file || !user?.uid) return;
+    try {
+      const r = ref(storage, `users/${user.uid}/profile/${Date.now()}-${file.name}`);
+      await uploadBytes(r, file);
+      const url = await getDownloadURL(r);
+      setProfilePhoto(url);
+      await setDoc(doc(db, 'users', user.uid), { photoUrl: url }, { merge: true });
+      await updateProfile({ photoURL: url, photoUrl: url });
+      showToast('Profile photo updated', 'success');
+    } catch (_) {
+      showToast('Failed to upload photo', 'error');
     }
   };
 
-  const handleRemovePhoto = () => {
+  const handleRemovePhoto = async () => {
     setProfilePhoto(null);
-    try { localStorage.removeItem('wb_profile_photo'); } catch (_) {}
+    if (user?.uid) {
+      try { await setDoc(doc(db, 'users', user.uid), { photoUrl: null }, { merge: true }); } catch (_) {}
+      await updateProfile({ photoURL: null, photoUrl: null });
+    }
     showToast('Profile photo removed', 'success');
   };
 
@@ -118,13 +163,16 @@ const SettingsDashboard = () => {
     }
   };
 
-  const regenerateApiKey = () => {
+  const regenerateApiKey = async () => {
     const newKey = 'sk_' + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 10);
     setApiKey(newKey);
-    showToast('API key regenerated (demo)', 'success');
+    if (user?.uid) await setDoc(doc(db, 'users', user.uid), { apiKey: newKey }, { merge: true });
+    showToast('API key regenerated', 'success');
   };
 
-  const saveWebhookSettings = () => {
+  const saveWebhookSettings = async () => {
+    if (!user?.uid) return;
+    await setDoc(doc(db, 'users', user.uid), { webhookUrl, webhookEvents }, { merge: true });
     showToast('Webhook settings saved', 'success');
   };
 
@@ -132,11 +180,28 @@ const SettingsDashboard = () => {
     e.preventDefault();
     setSaving(true);
     try {
-      await updateProfile({
-        name: `${firstName} ${lastName}`,
-        email,
-        // Add other fields as necessary
-      });
+      if (user?.uid) {
+        await setDoc(doc(db, 'users', user.uid), {
+          firstName,
+          lastName,
+          email,
+          phone,
+          language,
+          timezone,
+          dateFormat,
+          darkMode,
+          emailNotifications,
+          desktopNotifications,
+          mobileNotifications,
+          messageDelivery,
+          repliesAlert,
+          quotaAlerts,
+          productUpdates,
+          apiAccess,
+          apiKey,
+        }, { merge: true });
+      }
+      await updateProfile({ displayName: `${firstName} ${lastName}` });
       showToast('Profile updated', 'success');
     } catch (error) {
       showToast('Failed to update profile', 'error');

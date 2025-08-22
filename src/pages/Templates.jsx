@@ -20,6 +20,7 @@ const MessageTemplates = () => {
 
   const { user } = useAuth();
   const [templates, setTemplates] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Firestore subscription
   useEffect(() => {
@@ -28,6 +29,7 @@ const MessageTemplates = () => {
     const unsub = onSnapshot(colRef, (snap) => {
       const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setTemplates(rows);
+      setIsLoading(false);
     });
     return () => unsub();
   }, [user?.uid]);
