@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from "react";
 import { Bell, Settings, LogOut, User, ChevronDown, Menu } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { db } from "../firebase/client";
+import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 
 export default function TopBar({ toggleSidebar }) {
   const { user, logout } = useAuth();
@@ -11,30 +13,16 @@ export default function TopBar({ toggleSidebar }) {
   const notifRef = useRef();
   const userRef = useRef();
 
-  // Example notifications
-  const notifications = [
-    {
-      id: 1,
-      title: "New Message",
-      description: "You received a new broadcast response",
-      time: "2 min ago",
-      isUnread: true,
-    },
-    {
-      id: 2,
-      title: "Campaign Complete",
-      description: "Your broadcast campaign has finished",
-      time: "1 hour ago",
-      isUnread: false,
-    },
-    {
-      id: 3,
-      title: "System Update",
-      description: "New features are available",
-      time: "2 hours ago",
-      isUnread: true,
-    },
-  ];
+  const [notifications, setNotifications] = useState([]);
+  useEffect(() => {
+    if (!user?.uid) return;
+    const q = query(collection(db, 'users', user.uid, 'notifications'), orderBy('createdAt', 'desc'), limit(20));
+    const unsub = onSnapshot(q, (snap) => {
+      const rows = snap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
+      setNotifications(rows);
+    });
+    return () => unsub();
+  }, [user?.uid]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -73,7 +61,9 @@ export default function TopBar({ toggleSidebar }) {
               className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
             >
               <Bell className="w-6 h-6" />
-              <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
+              {notifications.some(n => n.isUnread) && (
+                <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
+              )}
             </button>
 
             {notifOpen && (
@@ -90,9 +80,9 @@ export default function TopBar({ toggleSidebar }) {
                         notif.isUnread ? "bg-blue-50" : ""
                       }`}
                     >
-                      <p className="font-medium text-gray-900">{notif.title}</p>
-                      <p className="text-sm text-gray-600">{notif.description}</p>
-                      <p className="text-xs text-gray-500 mt-1">{notif.time}</p>
+                      <p className="font-medium text-gray-900">{notif.title || 'Notification'}</p>
+                      <p className="text-sm text-gray-600">{notif.description || ''}</p>
+                      <p className="text-xs text-gray-500 mt-1">{notif.time || (notif.createdAt?.toDate ? notif.createdAt.toDate().toLocaleString() : '')}</p>
                     </div>
                   ))}
                 </div>

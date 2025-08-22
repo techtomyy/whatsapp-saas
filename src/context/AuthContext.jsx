@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { auth } from '../firebase/client';
+import { auth, db } from '../firebase/client';
+import { doc, onSnapshot } from 'firebase/firestore';
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -17,22 +18,41 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let unsubProfile = null;
     const unsub = onAuthStateChanged(auth, (fbUser) => {
+      if (unsubProfile) { try { unsubProfile(); } catch (_) {} unsubProfile = null; }
       if (fbUser) {
-        setUser({
+        // Base user from Firebase Auth
+        const baseUser = {
           uid: fbUser.uid,
           name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
           email: fbUser.email || '',
           photoUrl: fbUser.photoURL || '',
           role: 'User',
           plan: 'Free',
-        });
+        };
+        setUser(baseUser);
+        // Merge Firestore profile (role, settings, etc.)
+        const userRef = doc(db, 'users', fbUser.uid);
+        unsubProfile = onSnapshot(userRef, (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            setUser((u) => ({
+              ...baseUser,
+              ...data,
+              role: data.role || (data.admin ? 'Admin' : 'User'),
+            }));
+          } else {
+            setUser(baseUser);
+          }
+          setIsLoading(false);
+        }, () => setIsLoading(false));
       } else {
         setUser(null);
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
-    return () => unsub();
+    return () => { if (unsubProfile) try { unsubProfile(); } catch (_) {}; unsub(); };
   }, []);
 
   const login = (email, password) => signInWithEmailAndPassword(auth, email, password);

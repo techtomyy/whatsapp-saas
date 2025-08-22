@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -16,10 +16,24 @@ import {
   X,
 } from "lucide-react";
 import logo from "../assets/logo.jpg";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebase/client";
+import { collection, onSnapshot } from "firebase/firestore";
 
 export default function Sidebar({ isOpen, toggleSidebar }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
+  const [counts, setCounts] = useState({ contacts: 0, templates: 0, campaigns: 0, logs: 0 });
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsubContacts = onSnapshot(collection(db, 'users', user.uid, 'contacts'), (snap) => setCounts((c) => ({ ...c, contacts: snap.size })));
+    const unsubTemplates = onSnapshot(collection(db, 'users', user.uid, 'templates'), (snap) => setCounts((c) => ({ ...c, templates: snap.size })));
+    const unsubCampaigns = onSnapshot(collection(db, 'users', user.uid, 'campaigns'), (snap) => setCounts((c) => ({ ...c, campaigns: snap.size })));
+    const unsubLogs = onSnapshot(collection(db, 'users', user.uid, 'logs'), (snap) => setCounts((c) => ({ ...c, logs: snap.size })));
+    return () => { unsubContacts(); unsubTemplates(); unsubCampaigns(); unsubLogs(); };
+  }, [user?.uid]);
 
   const sidebarItems = [
     {
@@ -146,6 +160,11 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
               >
                 {item.icon}
                 <span className="font-medium">{item.label}</span>
+                {(item.id === 'contacts' && counts.contacts) || (item.id === 'templates' && counts.templates) || (item.id === 'automations' && counts.campaigns) || (item.id === 'logs' && counts.logs) ? (
+                  <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${isActive ? 'bg-white text-green-700' : 'bg-gray-200 text-gray-700'}`}>
+                    {item.id === 'contacts' ? counts.contacts : item.id === 'templates' ? counts.templates : item.id === 'automations' ? counts.campaigns : counts.logs}
+                  </span>
+                ) : null}
               </button>
             );
           })}
