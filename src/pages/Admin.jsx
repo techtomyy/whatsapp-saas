@@ -3,7 +3,8 @@ import { useAuth } from "../context/AuthContext";
 import DashboardLayout from "../components/DashboardLayout";
 import { Search, Plus, RefreshCcw, MoreHorizontal } from "lucide-react";
 import { useToast } from "../context/ToastContext";
-import { userService } from '../services/userService';
+import { db } from "../firebase/client";
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 
 // Pagination settings
 const PAGE_SIZE = 5;
@@ -11,80 +12,7 @@ const PAGE_SIZE = 5;
 const AdminPanel = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const [users, setUsers] = useState([
-    {
-      id: 1,
-      name: "Sarah Johnson",
-      email: "sarah@wb.app",
-      role: "Agent",
-      status: "Active",
-      lastLogin: "Aug 10, 2025 09:22 PM",
-    },
-    {
-      id: 2,
-      name: "Michael Brown",
-      email: "michael@wb.app",
-      role: "Admin",
-      status: "Active",
-      lastLogin: "Aug 10, 2025 02:45 PM",
-    },
-    {
-      id: 3,
-      name: "Marketing Team",
-      email: "mar@wb.app",
-      role: "Manager",
-      status: "Active",
-      lastLogin: "Aug 3, 2025 10:04 AM",
-    },
-    {
-      id: 4,
-      name: "David Wilson",
-      email: "david@wb.app",
-      role: "Agent",
-      status: "Disabled",
-      lastLogin: "July 27, 2025 07:00 PM",
-    },
-    {
-      id: 5,
-      name: "Amanda Rodriguez",
-      email: "amanda@wb.app",
-      role: "Agent",
-      status: "Suspended",
-      lastLogin: "July 25, 2025 11:32 PM",
-    },
-    {
-      id: 2,
-      name: "Michael Brown",
-      email: "michael@wb.app",
-      role: "Admin",
-      status: "Active",
-      lastLogin: "Aug 10, 2025 02:45 PM",
-    },
-    {
-      id: 3,
-      name: "Marketing Team",
-      email: "mar@wb.app",
-      role: "Manager",
-      status: "Active",
-      lastLogin: "Aug 3, 2025 10:04 AM",
-    },
-    {
-      id: 4,
-      name: "David Wilson",
-      email: "david@wb.app",
-      role: "Agent",
-      status: "Disabled",
-      lastLogin: "July 27, 2025 07:00 PM",
-    },
-    {
-      id: 5,
-      name: "Amanda Rodriguez",
-      email: "amanda@wb.app",
-      role: "Agent",
-      status: "Suspended",
-      lastLogin: "July 25, 2025 11:32 PM",
-    },
-  ]);
+  const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -94,29 +22,25 @@ const AdminPanel = () => {
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", role: "Agent" });
 
-  const handleAction = (id, action) => {
-    if (action === "Delete") {
-      setUsers(users.filter((u) => u.id !== id));
-      showToast('User deleted', 'success');
-    } else if (action === "Disable") {
-      setUsers(
-        users.map((u) =>
-          u.id === id ? { ...u, status: "Disabled" } : u
-        )
-      );
-      showToast('User disabled', 'success');
-    } else if (action === "Suspend") {
-      setUsers(
-        users.map((u) =>
-          u.id === id ? { ...u, status: "Suspended" } : u
-        )
-      );
-      showToast('User suspended', 'success');
-    } else if (action === "View") {
-      const target = users.find(u => u.id === id);
-      if (target) showToast(`${target.name} • ${target.email}`, 'success');
-    } else if (action === "Edit") {
-      showToast('Open edit user modal (demo)', 'success');
+  const handleAction = async (id, action) => {
+    try {
+      if (action === "Delete") {
+        await deleteDoc(doc(db, 'managed_users', String(id)));
+        showToast('User deleted', 'success');
+      } else if (action === "Disable") {
+        await updateDoc(doc(db, 'managed_users', String(id)), { status: 'Disabled' });
+        showToast('User disabled', 'success');
+      } else if (action === "Suspend") {
+        await updateDoc(doc(db, 'managed_users', String(id)), { status: 'Suspended' });
+        showToast('User suspended', 'success');
+      } else if (action === "View") {
+        const target = users.find(u => u.id === id);
+        if (target) showToast(`${target.name} • ${target.email}`, 'success');
+      } else if (action === "Edit") {
+        showToast('Open edit user modal (demo)', 'success');
+      }
+    } catch (_) {
+      showToast('Action failed', 'error');
     }
     setDropdownOpen(null);
   };
@@ -145,12 +69,8 @@ const AdminPanel = () => {
   const handleBulkAction = async (action) => {
     setActionLoading(true);
     try {
-      await Promise.all(
-        selectedUsers.map(userId => 
-          userService.updateUserStatus(userId, action)
-        )
-      );
-      // Refresh user list
+      const status = action;
+      await Promise.all(selectedUsers.map((userId) => updateDoc(doc(db, 'managed_users', String(userId)), { status })));
       setSelectedUsers([]);
       showToast(`Bulk ${action} completed`, 'success');
     } catch (error) {
@@ -161,15 +81,17 @@ const AdminPanel = () => {
   };
 
   useEffect(() => {
-    // Simulate data fetching
-    const fetchData = () => {
-      setIsLoading(true);
-      setTimeout(() => {
-        setIsLoading(false);
-      }, 1000);
-    };
-
-    fetchData();
+    setIsLoading(true);
+    const unsub = onSnapshot(collection(db, 'managed_users'), (snap) => {
+      const rows = snap.docs.map((d) => {
+        const data = d.data();
+        const last = data.lastLogin?.toDate ? data.lastLogin.toDate().toLocaleString() : (data.lastLogin || '-');
+        return { id: d.id, name: data.name || '', email: data.email || '', role: data.role || 'Agent', status: data.status || 'Active', lastLogin: last };
+      });
+      setUsers(rows);
+      setIsLoading(false);
+    }, () => setIsLoading(false));
+    return () => unsub();
   }, []);
 
   const openAddModal = () => {
@@ -177,7 +99,7 @@ const AdminPanel = () => {
     setAddOpen(true);
   };
 
-  const saveNewUser = (e) => {
+  const saveNewUser = async (e) => {
     e.preventDefault();
     const name = form.name.trim();
     const email = form.email.trim();
@@ -189,15 +111,15 @@ const AdminPanel = () => {
       showToast('Email already exists', 'warning');
       return;
     }
-    const newUser = {
-      id: Date.now(),
+    await addDoc(collection(db, 'managed_users'), {
       name,
       email,
       role: form.role,
       status: 'Active',
-      lastLogin: '-',
-    };
-    setUsers([newUser, ...users]);
+      lastLogin: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      createdBy: user?.uid || null,
+    });
     setAddOpen(false);
     showToast('User added', 'success');
   };

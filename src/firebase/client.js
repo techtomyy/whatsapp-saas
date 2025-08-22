@@ -3,16 +3,23 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
+// Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: 'AIzaSyAP7x9QPyt1DAKw8uvWqo_WHqg2X_kDiA4',
-  authDomain: 'whatsbroadcast-41407.firebaseapp.com',
-  projectId: 'whatsbroadcast-41407',
-  storageBucket: 'whatsbroadcast-41407.firebasestorage.app',
-  messagingSenderId: '310802247044',
-  appId: '1:310802247044:web:9aca3039e496353cf881d1',
-  measurementId: 'G-MD0JFFPS2W',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
+// Warn clearly if env vars are missing to avoid pointing to a wrong project
+const missing = Object.entries(firebaseConfig).filter(([_, v]) => !v).map(([k]) => k);
+if (missing.length) {
+  // eslint-disable-next-line no-console
+  console.warn('Missing Firebase env vars:', missing.join(', '));
+}
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);

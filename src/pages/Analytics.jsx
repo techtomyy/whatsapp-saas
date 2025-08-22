@@ -1,11 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer } from "recharts";
 import { ChevronDown, Download } from "lucide-react";
 import { useToast } from "../context/ToastContext";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebase/client";
+import { collection, onSnapshot } from "firebase/firestore";
 
 const AnalyticsDashboard = () => {
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState("Last 7 days");
   const [selectedMetric, setSelectedMetric] = useState("Total Messages");
 
@@ -38,8 +42,78 @@ const AnalyticsDashboard = () => {
     }));
   };
 
-  const [chartData, setChartData] = useState(generateChartData(selectedPeriod));
-  useEffect(() => { setChartData(generateChartData(selectedPeriod)); }, [selectedPeriod]);
+  // Pull logs and compute metrics from Firestore
+  const [logs, setLogs] = useState([]);
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsub = onSnapshot(
+      collection(db, 'users', user.uid, 'logs'),
+      (snap) => {
+        const rows = snap.docs.map((d) => {
+          const data = d.data();
+          const ts = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
+          return { ts, status: data.status || 'Delivered', type: data.type || 'Text' };
+        });
+        setLogs(rows);
+      },
+      (err) => {
+        console.warn('analytics logs listener error', err?.code || err);
+        setLogs([]);
+      }
+    );
+    return () => unsub();
+  }, [user?.uid]);
+
+  const filteredLogs = useMemo(() => {
+    const now = new Date();
+    const days = selectedPeriod === 'Last 7 days' ? 7 : selectedPeriod === 'Last 30 days' ? 30 : 90;
+    const cutoff = new Date(now);
+    cutoff.setDate(now.getDate() - (days - 1));
+    return logs.filter(l => l.ts >= cutoff);
+  }, [logs, selectedPeriod]);
+
+  const chartData = useMemo(() => {
+    // build day labels for the selected period
+    const days = selectedPeriod === 'Last 7 days' ? 7 : selectedPeriod === 'Last 30 days' ? 30 : 90;
+    const labels = [];
+    const fmt = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      labels.push(fmt(d));
+    }
+
+    const countBy = new Map(labels.map(l => [l, { total: 0, delivered: 0, read: 0 }]));
+    filteredLogs.forEach((l) => {
+      const label = fmt(l.ts);
+      if (!countBy.has(label)) countBy.set(label, { total: 0, delivered: 0, read: 0 });
+      const o = countBy.get(label);
+      o.total += 1;
+      if (l.status === 'Delivered') o.delivered += 1;
+      if (l.status === 'Read') o.read += 1;
+    });
+
+    return labels.map((label) => {
+      const { total, delivered, read } = countBy.get(label) || { total: 0, delivered: 0, read: 0 };
+      return {
+        day: label,
+        totalMessages: total,
+        deliveryRate: total ? Math.round((delivered / total) * 100) : 0,
+        readRate: total ? Math.round((read / total) * 100) : 0,
+        responseRate: 0,
+      };
+    });
+  }, [filteredLogs, selectedPeriod]);
+
+  const kpis = useMemo(() => {
+    const total = filteredLogs.length;
+    const delivered = filteredLogs.filter(l => l.status === 'Delivered').length;
+    const read = filteredLogs.filter(l => l.status === 'Read').length;
+    const deliveryRate = total ? Math.round((delivered / total) * 100) : 0;
+    const readRate = total ? Math.round((read / total) * 100) : 0;
+    const responseRate = 0;
+    return { total, deliveryRate, readRate, responseRate };
+  }, [filteredLogs]);
 
   // Template performance data
   const templateData = [
@@ -115,46 +189,22 @@ const AnalyticsDashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
             <div className="text-gray-600 text-sm mb-2">Total Messages</div>
-            <div className="text-3xl font-bold text-gray-900 mb-1">1,248</div>
-            <div className="flex items-center text-sm">
-              <span className="text-green-600 font-medium">+12%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-1 mt-3">
-              <div className="bg-green-500 h-1 rounded-full w-3/4"></div>
-            </div>
+            <div className="text-3xl font-bold text-gray-900 mb-1">{kpis.total}</div>
           </div>
 
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
             <div className="text-gray-600 text-sm mb-2">Delivery Rate</div>
-            <div className="text-3xl font-bold text-gray-900 mb-1">97.5%</div>
-            <div className="flex items-center text-sm">
-              <span className="text-green-600 font-medium">+2.1%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-1 mt-3">
-              <div className="bg-green-500 h-1 rounded-full w-full"></div>
-            </div>
+            <div className="text-3xl font-bold text-gray-900 mb-1">{kpis.deliveryRate}%</div>
           </div>
 
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
             <div className="text-gray-600 text-sm mb-2">Read Rate</div>
-            <div className="text-3xl font-bold text-gray-900 mb-1">89.2%</div>
-            <div className="flex items-center text-sm">
-              <span className="text-green-600 font-medium">+1.6%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-1 mt-3">
-              <div className="bg-green-500 h-1 rounded-full w-5/6"></div>
-            </div>
+            <div className="text-3xl font-bold text-gray-900 mb-1">{kpis.readRate}%</div>
           </div>
 
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
             <div className="text-gray-600 text-sm mb-2">Response Rate</div>
-            <div className="text-3xl font-bold text-gray-900 mb-1">64.8%</div>
-            <div className="flex items-center text-sm">
-              <span className="text-red-600 font-medium">-2.3%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-1 mt-3">
-              <div className="bg-green-500 h-1 rounded-full w-2/3"></div>
-            </div>
+            <div className="text-3xl font-bold text-gray-900 mb-1">{kpis.responseRate}%</div>
           </div>
         </div>
 
