@@ -12,9 +12,14 @@ import {
   X,
 } from "lucide-react";
 import { useToast } from "../context/ToastContext";
+import { useAuth } from "../context/AuthContext";
+import { db, storage } from "../firebase/client";
+import { collection, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 export default function Composer() {
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [selectedRecipients, setSelectedRecipients] = useState([
     "Sarah Jhonson",
     "David Wilson",
@@ -38,17 +43,23 @@ export default function Composer() {
   const videoInputRef = useRef(null);
   const docInputRef = useRef(null);
 
-  // load contacts for suggestions
+  // load contacts for suggestions from Firestore
   const [allContacts, setAllContacts] = useState([]);
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('wb_contacts');
-      const parsed = stored ? JSON.parse(stored) : [];
-      setAllContacts(parsed.map(c => c.name));
-    } catch (_) {
-      setAllContacts([]);
-    }
-  }, []);
+    if (!user?.uid) return;
+    const colRef = collection(db, 'users', user.uid, 'contacts');
+    const unsub = onSnapshot(
+      colRef,
+      (snap) => {
+        setAllContacts(snap.docs.map(d => d.data().name).filter(Boolean));
+      },
+      (err) => {
+        console.warn('contacts listener error', err?.code || err);
+        setAllContacts([]);
+      }
+    );
+    return () => unsub();
+  }, [user?.uid]);
 
   const recipientSuggestions = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -113,51 +124,60 @@ export default function Composer() {
     return true;
   };
 
-  const persistLog = (payload) => {
-    try {
-      const stored = localStorage.getItem('wb_logs');
-      const logs = stored ? JSON.parse(stored) : [];
-      logs.unshift({ id: Date.now(), ...payload });
-      localStorage.setItem('wb_logs', JSON.stringify(logs));
-    } catch (_) {}
+  const uploadToStorage = async (file) => {
+    if (!file || !user?.uid) return null;
+    const path = `users/${user.uid}/uploads/${Date.now()}-${file.name}`;
+    const r = ref(storage, path);
+    await uploadBytes(r, file);
+    const url = await getDownloadURL(r);
+    return { name: file.name, url, path, size: file.size, type: file.type };
   };
 
-  const maybeSaveTemplate = () => {
-    if (!saveAsTemplate) return;
-    try {
-      const stored = localStorage.getItem('wb_templates');
-      const templates = stored ? JSON.parse(stored) : [];
-      const name = (messageText || linkUrl || (imageFile?.name || videoFile?.name || docFile?.name) || 'Template')
-        .toString()
-        .slice(0, 40);
-      templates.unshift({ id: Date.now(), name, type: activeTab, content: {
-        text: messageText,
-        link: linkUrl,
-        file: imageFile?.name || videoFile?.name || docFile?.name || null,
-      }});
-      localStorage.setItem('wb_templates', JSON.stringify(templates));
-      showToast('Saved as template', 'success');
-    } catch (_) {}
+  const persistLog = async (payload) => {
+    if (!user?.uid) return;
+    await addDoc(collection(db, 'users', user.uid, 'logs'), {
+      ...payload,
+      createdAt: serverTimestamp(),
+    });
   };
 
-  const handleSendMessage = () => {
+  const maybeSaveTemplate = async () => {
+    if (!saveAsTemplate || !user?.uid) return;
+    const name = (messageText || linkUrl || (imageFile?.name || videoFile?.name || docFile?.name) || 'Template')
+      .toString()
+      .slice(0, 40);
+    await addDoc(collection(db, 'users', user.uid, 'templates'), {
+      name,
+      type: activeTab === 'text' ? 'Text' : activeTab.charAt(0).toUpperCase() + activeTab.slice(1),
+      preview: messageText || linkUrl || '',
+      created: serverTimestamp(),
+      lastUsed: null,
+    });
+    showToast('Saved as template', 'success');
+  };
+
+  const handleSendMessage = async () => {
     if (!validateBeforeSend()) return;
 
+    let attachment = null;
+    if (activeTab === 'image' && imageFile) attachment = await uploadToStorage(imageFile);
+    if (activeTab === 'video' && videoFile) attachment = await uploadToStorage(videoFile);
+    if (activeTab === 'file' && docFile) attachment = await uploadToStorage(docFile);
+
+    const status = scheduleForLater ? 'Pending' : 'Delivered';
     const payload = {
       recipients: selectedRecipients,
-      type: activeTab,
+      type: activeTab.charAt(0).toUpperCase() + activeTab.slice(1),
       message: messageText || (activeTab === 'link' ? linkUrl : ''),
-      attachmentName: imageFile?.name || videoFile?.name || docFile?.name || null,
-      scheduled: scheduleForLater,
-      date: scheduleDate,
-      time: scheduleTime,
-      createdAt: new Date().toISOString(),
+      attachment,
+      status,
+      scheduleForLater,
+      scheduleAt: scheduleForLater && scheduleDate && scheduleTime ? `${scheduleDate} ${scheduleTime}` : null,
     };
-    persistLog(payload);
-    maybeSaveTemplate();
+    await persistLog(payload);
+    await maybeSaveTemplate();
     showToast(scheduleForLater ? 'Message scheduled' : 'Message sent', 'success');
 
-    // reset light
     if (!scheduleForLater) {
       setMessageText("");
       setImageFile(null);

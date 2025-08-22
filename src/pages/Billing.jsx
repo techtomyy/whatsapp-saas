@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import DashboardLayout from "../components/DashboardLayout";
 import { Check, X, Crown, MessageSquare, Mail, BookOpen, CreditCard, Plus } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import { db } from '../firebase/client';
+import { doc, onSnapshot, setDoc, collection, addDoc, updateDoc, getDocs } from 'firebase/firestore';
 
 const BillingDashboard = () => {
   const { showToast } = useToast();
-  const [currentPlan, setCurrentPlan] = useState(() => {
-    try { return localStorage.getItem('wb_plan') || 'Pro'; } catch (_) { return 'Pro'; }
-  });
+  const { user } = useAuth();
+  const [currentPlan, setCurrentPlan] = useState('Pro');
   const [showAddPayment, setShowAddPayment] = useState(false);
   const [newCardNumber, setNewCardNumber] = useState('');
   const [confirmModal, setConfirmModal] = useState({ open: false, title: '', message: '', onConfirm: null });
@@ -20,28 +22,30 @@ const BillingDashboard = () => {
   });
 
   // Billing history data
-  const [billingHistory, setBillingHistory] = useState(() => {
-    try {
-      const s = localStorage.getItem('wb_billing_history');
-      return s ? JSON.parse(s) : [
-        { date: 'July 1, 2025', plan: 'Pro Plan - Monthly', amount: '$49.00' },
-        { date: 'June 1, 2025', plan: 'Pro Plan - Monthly', amount: '$49.00' },
-        { date: 'May 1, 2025', plan: 'Pro Plan - Monthly', amount: '$49.00' },
-        { date: 'April 1, 2025', plan: 'Pro Plan - Monthly', amount: '$49.00' }
-      ];
-    } catch (_) {
-      return [];
-    }
-  });
+  const [billingHistory, setBillingHistory] = useState([]);
 
   // Payment methods data
-  const [paymentMethods, setPaymentMethods] = useState(() => {
-    try { const s = localStorage.getItem('wb_payment_methods'); return s ? JSON.parse(s) : [{ id: 1, type: 'visa', number: '4242', expiry: '12/26', default: true }]; } catch (_) { return [{ id: 1, type: 'visa', number: '4242', expiry: '12/26', default: true }]; }
-  });
+  const [paymentMethods, setPaymentMethods] = useState([]);
 
-  useEffect(() => { try { localStorage.setItem('wb_plan', currentPlan); } catch (_) {} }, [currentPlan]);
-  useEffect(() => { try { localStorage.setItem('wb_payment_methods', JSON.stringify(paymentMethods)); } catch (_) {} }, [paymentMethods]);
-  useEffect(() => { try { localStorage.setItem('wb_billing_history', JSON.stringify(billingHistory)); } catch (_) {} }, [billingHistory]);
+  // Load billing data from Firestore
+  useEffect(() => {
+    if (!user?.uid) return;
+    const userRef = doc(db, 'users', user.uid);
+    const unsubUser = onSnapshot(userRef, (snap) => {
+      const d = snap.data() || {};
+      if (d.currentPlan) setCurrentPlan(d.currentPlan);
+    });
+    const payRef = collection(db, 'users', user.uid, 'payment_methods');
+    const unsubPay = onSnapshot(payRef, (snap) => {
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setPaymentMethods(rows);
+    });
+    const histRef = collection(db, 'users', user.uid, 'billing_history');
+    const unsubHist = onSnapshot(histRef, (snap) => {
+      setBillingHistory(snap.docs.map((d) => d.data()));
+    });
+    return () => { unsubUser(); unsubPay(); unsubHist(); };
+  }, [user?.uid]);
 
   // Plans data
   const plans = {
@@ -50,8 +54,9 @@ const BillingDashboard = () => {
     Business: { price: 99, description: 'For larger organizations', features: { messages: '5,000 messages/month', contacts: 'Up to 25,000 contacts', whatsapp: '5 WhatsApp accounts', automations: 'Advanced Automations' } }
   };
 
-  const handlePlanChange = (planName) => {
+  const handlePlanChange = async (planName) => {
     setCurrentPlan(planName);
+    if (user?.uid) await setDoc(doc(db, 'users', user.uid), { currentPlan: planName }, { merge: true });
     showToast(`${planName} plan selected`, 'success');
   };
 
@@ -64,12 +69,15 @@ const BillingDashboard = () => {
     });
   };
 
-  const handleUpgradePlan = (planName) => {
+  const handleUpgradePlan = async (planName) => {
     const target = planName || (currentPlan === 'Free' ? 'Pro' : 'Business');
     setCurrentPlan(target);
     const price = plans[target].price;
     const entry = { date: new Date().toLocaleDateString(), plan: `${target} Plan - Monthly`, amount: `$${price}.00` };
-    setBillingHistory([entry, ...billingHistory]);
+    if (user?.uid) await Promise.all([
+      setDoc(doc(db, 'users', user.uid), { currentPlan: target }, { merge: true }),
+      addDoc(collection(db, 'users', user.uid, 'billing_history'), entry)
+    ]);
     showToast(`Upgraded to ${target}`, 'success');
   };
 
@@ -82,18 +90,21 @@ const BillingDashboard = () => {
     });
   };
 
-  const addPaymentMethod = () => {
+  const addPaymentMethod = async () => {
     const digits = newCardNumber.replace(/\D/g, '');
     if (digits.length < 12) { showToast('Enter a valid card number (min 12 digits, demo)', 'warning'); return; }
-    const newMethod = { id: paymentMethods.length + 1, type: 'visa', number: digits.slice(-4), expiry: '12/28', default: false };
-    setPaymentMethods([...paymentMethods, newMethod]);
+    const newMethod = { type: 'visa', number: digits.slice(-4), expiry: '12/28', default: false };
+    if (user?.uid) await addDoc(collection(db, 'users', user.uid, 'payment_methods'), newMethod);
     setNewCardNumber('');
     setShowAddPayment(false);
     showToast('Payment method added', 'success');
   };
 
-  const setDefaultPayment = (id) => {
-    setPaymentMethods(paymentMethods.map(method => ({ ...method, default: method.id === id })));
+  const setDefaultPayment = async (id) => {
+    if (!user?.uid) return;
+    // unset others and set selected as default
+    const snap = await getDocs(collection(db, 'users', user.uid, 'payment_methods'));
+    await Promise.all(snap.docs.map(d => updateDoc(doc(db, 'users', user.uid, 'payment_methods', d.id), { default: d.id === id })));
     showToast('Default payment method updated', 'success');
   };
 
