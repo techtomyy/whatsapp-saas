@@ -1,6 +1,9 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../components/DashboardLayout";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebase/client";
+import { collection, onSnapshot, doc, onSnapshot as onDocSnapshot } from "firebase/firestore";
 import {
   TrendingUp,
   TrendingDown,
@@ -33,6 +36,36 @@ ChartJS.register(
 
 export default function WhatsAppDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [contacts, setContacts] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [campaigns, setCampaigns] = useState([]);
+  const [plan, setPlan] = useState('Pro');
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsubContacts = onSnapshot(
+      collection(db, 'users', user.uid, 'contacts'),
+      (snap) => setContacts(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => { console.warn('dashboard contacts listener error', err?.code || err); setContacts([]); }
+    );
+    const unsubLogs = onSnapshot(
+      collection(db, 'users', user.uid, 'logs'),
+      (snap) => setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => { console.warn('dashboard logs listener error', err?.code || err); setLogs([]); }
+    );
+    const unsubCamps = onSnapshot(
+      collection(db, 'users', user.uid, 'campaigns'),
+      (snap) => setCampaigns(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => { console.warn('dashboard campaigns listener error', err?.code || err); setCampaigns([]); }
+    );
+    const unsubUser = onDocSnapshot(
+      doc(db, 'users', user.uid),
+      (snap) => setPlan((snap.data() || {}).currentPlan || 'Pro'),
+      (err) => { console.warn('dashboard user listener error', err?.code || err); setPlan('Pro'); }
+    );
+    return () => { unsubContacts(); unsubLogs(); unsubCamps(); unsubUser(); };
+  }, [user?.uid]);
   const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   const data = {
@@ -88,11 +121,16 @@ export default function WhatsAppDashboard() {
     },
   };
 
+  const sentCount = logs.length;
+  const activeContacts = contacts.length;
+  const delivered = logs.filter(l => l.status === 'Delivered').length;
+  const read = logs.filter(l => l.status === 'Read').length;
+  const openRate = sentCount ? Math.round((read / sentCount) * 100) : 0;
   const stats = [
-    { title: "Message Sent", value: "1,248", change: "+12%", period: "Last 30 days", trend: "up" },
-    { title: "Active Contacts", value: "357", change: "+5%", period: "Last 30 days", trend: "up" },
-    { title: "Open Rate", value: "92%", change: "+2%", period: "Last 30 days", trend: "up" },
-    { title: "Click Rate", value: "64%", change: "-3%", period: "Last 30 days", trend: "down" },
+    { title: "Message Sent", value: String(sentCount), change: "", period: "All time", trend: "up" },
+    { title: "Active Contacts", value: String(activeContacts), change: "", period: "All time", trend: "up" },
+    { title: "Open Rate", value: `${openRate}%`, change: "", period: "All time", trend: "up" },
+    { title: "Campaigns", value: String(campaigns.length), change: "", period: "All time", trend: "up" },
   ];
 
   const recentMessages = [
@@ -122,7 +160,7 @@ export default function WhatsAppDashboard() {
       <div className="p-4 sm:p-6 space-y-6">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600">Welcome back, John!</p>
+          <p className="text-gray-600">Welcome back, {user?.name || 'User'}!</p>
         </div>
         
         {/* Stats */}
@@ -175,14 +213,14 @@ export default function WhatsAppDashboard() {
             <div className="mt-6 pt-6 border-t border-gray-200">
               <h4 className="text-sm font-semibold text-gray-900 mb-3">Current Plan</h4>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-600">Pro Plan</span>
+                <span className="text-sm text-gray-600">{plan} Plan</span>
                 <button onClick={handleManagePlan} className="text-sm text-green-600 hover:text-green-700">Manage</button>
               </div>
               <div className="bg-gray-200 rounded-full h-2 mb-2">
                 <div className="bg-green-500 h-2 rounded-full" style={{ width: "65%" }}></div>
               </div>
               <div className="flex justify-between text-xs text-gray-500">
-                <span>819/1,250 messages</span> <span>65% used</span>
+                <span>{delivered}/{Math.max(delivered, sentCount)} messages</span> <span>{sentCount ? Math.round((delivered / sentCount) * 100) : 0}% delivered</span>
               </div>
             </div>
           </div>

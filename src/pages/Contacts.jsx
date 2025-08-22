@@ -38,7 +38,9 @@ export default function Contacts() {
   useEffect(() => {
     if (!user?.uid) return;
     const colRef = collection(db, 'users', user.uid, 'contacts');
-    const unsub = onSnapshot(colRef, (snap) => {
+    const unsub = onSnapshot(
+      colRef,
+      (snap) => {
       const rows = snap.docs.map(d => {
         const data = d.data();
         return {
@@ -51,7 +53,12 @@ export default function Contacts() {
         };
       });
       setContacts(rows);
-    });
+      },
+      (err) => {
+        console.warn('contacts listener error', err?.code || err);
+        setContacts([]);
+      }
+    );
     return () => unsub();
   }, [user?.uid]);
 

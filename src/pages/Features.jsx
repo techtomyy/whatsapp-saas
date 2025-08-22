@@ -99,7 +99,7 @@ const Features = () => {
 
             <div className="space-y-8">
               {features.map((item) => (
-                <div key={feature.id} className="group">
+                <div key={item.id} className="group">
                   <div className="flex items-start space-x-4">
                     <div
                       className={`w-8 h-8 ${item.color} rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-sm`}
