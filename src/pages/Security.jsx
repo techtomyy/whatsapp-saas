@@ -11,16 +11,20 @@ import {
 import { useToast } from "../context/ToastContext";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { db } from "../firebase/client";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
 const SecurityDashboard = () => {
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [ipInput, setIpInput] = useState("");
   const [ipRestrictions, setIpRestrictions] = useState([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [accountDeactivated, setAccountDeactivated] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
 
   // Login activity data
   const [loginActivity] = useState([
@@ -81,24 +85,25 @@ const SecurityDashboard = () => {
     },
   ]);
 
-  // hydrate from localStorage
+  // Load from Firestore and persist changes
   useEffect(() => {
-    try {
-      const s2fa = localStorage.getItem('wb_sec_2fa');
-      if (s2fa) setTwoFactorEnabled(JSON.parse(s2fa));
-      const sips = localStorage.getItem('wb_sec_ips');
-      if (sips) setIpRestrictions(JSON.parse(sips));
-      const sdev = localStorage.getItem('wb_sec_devices');
-      if (sdev) setDevices(JSON.parse(sdev));
-      const sdeact = localStorage.getItem('wb_sec_deactivated');
-      if (sdeact) setAccountDeactivated(JSON.parse(sdeact));
-    } catch (_) {}
-  }, []);
+    const uid = user?.uid;
+    if (!uid) return;
+    const userRef = doc(db, 'users', uid);
+    const unsub = onSnapshot(userRef, (snap) => {
+      const d = snap.data() || {};
+      if (d.twoFactorEnabled !== undefined) setTwoFactorEnabled(!!d.twoFactorEnabled);
+      if (Array.isArray(d.ipRestrictions)) setIpRestrictions(d.ipRestrictions);
+      if (Array.isArray(d.devices)) setDevices(d.devices);
+      if (d.accountDeactivated !== undefined) setAccountDeactivated(!!d.accountDeactivated);
+    });
+    return () => unsub();
+  }, [user?.uid]);
 
-  useEffect(() => { try { localStorage.setItem('wb_sec_2fa', JSON.stringify(twoFactorEnabled)); } catch (_) {} }, [twoFactorEnabled]);
-  useEffect(() => { try { localStorage.setItem('wb_sec_ips', JSON.stringify(ipRestrictions)); } catch (_) {} }, [ipRestrictions]);
-  useEffect(() => { try { localStorage.setItem('wb_sec_devices', JSON.stringify(devices)); } catch (_) {} }, [devices]);
-  useEffect(() => { try { localStorage.setItem('wb_sec_deactivated', JSON.stringify(accountDeactivated)); } catch (_) {} }, [accountDeactivated]);
+  useEffect(() => { const uid = user?.uid; if (uid) setDoc(doc(db, 'users', uid), { twoFactorEnabled }, { merge: true }); }, [user?.uid, twoFactorEnabled]);
+  useEffect(() => { const uid = user?.uid; if (uid) setDoc(doc(db, 'users', uid), { ipRestrictions }, { merge: true }); }, [user?.uid, ipRestrictions]);
+  useEffect(() => { const uid = user?.uid; if (uid) setDoc(doc(db, 'users', uid), { devices }, { merge: true }); }, [user?.uid, devices]);
+  useEffect(() => { const uid = user?.uid; if (uid) setDoc(doc(db, 'users', uid), { accountDeactivated }, { merge: true }); }, [user?.uid, accountDeactivated]);
 
   const getDeviceIcon = (type) => {
     switch (type) {
@@ -411,7 +416,7 @@ const SecurityDashboard = () => {
                   <p className="text-sm text-gray-600 mb-3">
                     Change your account password.
                   </p>
-                  <button onClick={() => { showToast('Password reset email sent (demo)', 'success'); }} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
+                  <button onClick={() => setResetOpen(true)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
                     Reset Password
                   </button>
                 </div>
@@ -468,6 +473,37 @@ const SecurityDashboard = () => {
                   logout();
                   navigate('/');
                 }} className="px-4 py-2 bg-red-600 text-white rounded-lg">Delete</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {resetOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="bg-white w-full max-w-md rounded-lg shadow-lg p-6">
+              <h3 className="text-lg font-semibold mb-2">Reset Password</h3>
+              <p className="text-sm text-gray-600 mb-4">Enter your account email to receive a reset link.</p>
+              <input
+                type="email"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4"
+              />
+              <div className="flex justify-end gap-3">
+                <button onClick={() => { setResetOpen(false); setResetEmail(""); }} className="px-4 py-2 border rounded-lg">Cancel</button>
+                <button onClick={async () => {
+                  try {
+                    if (!resetEmail.trim()) { showToast('Please enter your email', 'warning'); return; }
+                    const { sendPasswordResetEmail } = await import('firebase/auth');
+                    const { auth } = await import('../firebase/client');
+                    await sendPasswordResetEmail(auth, resetEmail.trim());
+                    showToast('Password reset email sent', 'success');
+                    setResetOpen(false);
+                    setResetEmail("");
+                  } catch (_) {
+                    showToast('Failed to send reset email', 'error');
+                  }
+                }} className="px-4 py-2 bg-green-600 text-white rounded-lg">Send</button>
               </div>
             </div>
           </div>

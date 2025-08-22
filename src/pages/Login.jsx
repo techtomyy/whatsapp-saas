@@ -12,6 +12,8 @@ export default function LoginPage() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
   const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
@@ -154,7 +156,44 @@ export default function LoginPage() {
               >
                 Continue with Google
               </button>
+              <button
+                type="button"
+                onClick={() => setResetOpen(true)}
+                className="w-full mt-2 text-sm text-green-600 hover:text-green-700"
+              >
+                Forgot password?
+              </button>
             </div>
+
+            {resetOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+                <div className="bg-white w-full max-w-md rounded-lg shadow-lg p-6">
+                  <h3 className="text-lg font-semibold mb-2">Reset Password</h3>
+                  <p className="text-sm text-gray-600 mb-4">Enter your email to receive a reset link.</p>
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4"
+                  />
+                  <div className="flex justify-end gap-3">
+                    <button onClick={() => { setResetOpen(false); setResetEmail(''); }} className="px-4 py-2 border rounded-lg">Cancel</button>
+                    <button onClick={async () => {
+                      try {
+                        if (!resetEmail.trim()) { setError('Please enter your email'); return; }
+                        const { sendPasswordResetEmail } = await import('firebase/auth');
+                        const { auth } = await import('../firebase/client');
+                        await sendPasswordResetEmail(auth, resetEmail.trim());
+                        setResetOpen(false); setResetEmail(''); setError('');
+                      } catch (err) {
+                        setError(err?.message || 'Failed to send reset email');
+                      }
+                    }} className="px-4 py-2 bg-green-600 text-white rounded-lg">Send</button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="mt-5 text-center">
               <p className="text-sm text-gray-600">

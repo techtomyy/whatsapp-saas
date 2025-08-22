@@ -11,102 +11,45 @@ import {
   Upload,
 } from "lucide-react";
 import { useToast } from "../context/ToastContext";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebase/client";
+import { collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 
 const MessageLogs = () => {
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Example data
-  const [messages, setMessages] = useState([
-    {
-      recipient: "Sarah Johnson",
-      content: "Hello! Just confirming our meeting ...",
-      type: "Text",
-      status: "Delivered",
-      timestamp: "2025-08-10 12:45",
-    },
-    {
-      recipient: "Michael Brown",
-      content: "Thanks for your inquiry about our p...",
-      type: "Text",
-      status: "Read",
-      timestamp: "2025-08-10 22:00",
-    },
-    {
-      recipient: "Marketing Team",
-      content: "New campaign update: [Image]",
-      type: "Image",
-      status: "Pending",
-      timestamp: "2025-08-09 09:10",
-    },
-    {
-      recipient: "David Wilson",
-      content: "Please check the attachment for t...",
-      type: "File",
-      status: "Failed",
-      timestamp: "2025-08-01 23:59",
-    },
-    {
-      recipient: "Amanda Rodriguez",
-      content: "Here's the product demo you requ...",
-      type: "Video",
-      status: "Delivered",
-      timestamp: "2025-07-30 16:30",
-    },
-    {
-      recipient: "Ali Khan",
-      content: "Follow-up on your request",
-      type: "Text",
-      status: "Delivered",
-      timestamp: "2025-07-28 11:20",
-    },
-    {
-      recipient: "Zara Ahmed",
-      content: "Invoice attached",
-      type: "File",
-      status: "Read",
-      timestamp: "2025-07-25 09:05",
-    },
-    {
-      recipient: "Dev Team",
-      content: "Deploy scheduled at midnight",
-      type: "Text",
-      status: "Pending",
-      timestamp: "2025-07-20 18:00",
-    },
-    {
-      recipient: "Client XYZ",
-      content: "Can we reschedule?",
-      type: "Text",
-      status: "Failed",
-      timestamp: "2025-07-18 14:00",
-    },
-    {
-      recipient: "Naima",
-      content: "Thanks for the demo!",
-      type: "Text",
-      status: "Read",
-      timestamp: "2025-07-15 10:10",
-    },
-    {
-      recipient: "Support",
-      content: "Ticket closed",
-      type: "Text",
-      status: "Delivered",
-      timestamp: "2025-07-10 08:40",
-    },
-    {
-      recipient: "Partners",
-      content: "Monthly report attached",
-      type: "File",
-      status: "Delivered",
-      timestamp: "2025-07-01 07:00",
-    },
-  ]);
+  const [messages, setMessages] = useState([]);
+
+  // Live Firestore logs
+  useEffect(() => {
+    if (!user?.uid) return;
+    const colRef = collection(db, 'users', user.uid, 'logs');
+    const unsub = onSnapshot(colRef, (snap) => {
+      const rows = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        const ts = data.createdAt?.toDate ? data.createdAt.toDate().toLocaleString() : (data.createdAt || '');
+        const recipients = Array.isArray(data.recipients) ? data.recipients : ['Unknown'];
+        const content = data.message || (data.attachment?.name || `${data.type || 'Text'} content`);
+        recipients.forEach((r) => rows.push({
+          id: d.id,
+          recipient: r,
+          content,
+          type: data.type || 'Text',
+          status: data.status || 'Delivered',
+          timestamp: data.scheduleAt || ts,
+        }));
+      });
+      setMessages(rows.sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1)));
+    });
+    return () => unsub();
+  }, [user?.uid]);
 
   // Load additional logs created by Composer from localStorage on mount
   useEffect(() => {
@@ -346,7 +289,7 @@ const MessageLogs = () => {
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex items-center gap-2">
                           <ViewButton row={message} />
-                          <ResendButton row={message} onResent={(updated) => setMessages(prev => prev.map(p => (p === message ? updated : p)))} />
+                          <ResendButton row={message} userId={user?.uid} onResent={(updated) => setMessages(prev => prev.map(p => (p === message ? updated : p)))} />
                         </div>
                       </td>
                     </tr>
@@ -452,18 +395,28 @@ function ViewButton({ row }) {
   );
 }
 
-function ResendButton({ row, onResent }) {
+function ResendButton({ row, userId, onResent }) {
   const { showToast } = useToast();
-  const handle = () => {
-    const d = new Date();
-    const yy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const hh = String(d.getHours()).padStart(2, '0');
-    const mi = String(d.getMinutes()).padStart(2, '0');
-    const updated = { ...row, status: 'Delivered', timestamp: `${yy}-${mm}-${dd} ${hh}:${mi}` };
-    onResent(updated);
-    showToast('Message resent', 'success');
+  const handle = async () => {
+    try {
+      if (userId && row.id) {
+        await updateDoc(doc(db, 'users', userId, 'logs', row.id), {
+          status: 'Delivered',
+          resentAt: serverTimestamp(),
+        });
+      }
+      const d = new Date();
+      const yy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mi = String(d.getMinutes()).padStart(2, '0');
+      const updated = { ...row, status: 'Delivered', timestamp: `${yy}-${mm}-${dd} ${hh}:${mi}` };
+      onResent(updated);
+      showToast('Message resent', 'success');
+    } catch (_) {
+      showToast('Failed to update log', 'error');
+    }
   };
   return (
     <button onClick={handle} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
